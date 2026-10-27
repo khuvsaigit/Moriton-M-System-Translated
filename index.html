@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<!-- Морьтон Адууны Төв - Адууны эмнэлгийн удирдлагын систем v3.0 (2026-05-22) Oracle Live -->
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#022438">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Морьтон">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Морьтон Адууны Төв</title>
+
+<!-- ============================================================
+     PWA — суулгаж болох програм болгох (manifest + icon)
+     ============================================================ -->
+<link rel="manifest" href="manifest.json?v=20260731">
+<link rel="icon" href="icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     FIREBASE — өгөгдлийн синк (Firestore real-time)
+     ⚠️ Доорх firebaseConfig-ийг ӨӨРИЙН project-ийн утгаар СОЛИНО.
+        Firebase Console → Project settings → Your apps → Web app
+     ============================================================ -->
+<script type="module" src="firebase.js?v=20260925"></script>
+
+<link rel="stylesheet" href="style.css?v=20261023">
+</head>
+<body>
+
+<!-- ============================================================
+     LOGIN
+     ============================================================ -->
+<div class="login-bd" id="login">
+  <div class="login-card">
+    <div class="login-logo"></div>
+    <div class="login-name">Морьтон Адууны Төв</div>
+    <div class="login-sub">Эмнэлгийн удирдлагын нэгдсэн систем</div>
+
+    <div class="login-form">
+      <div class="fld" style="text-align:left">
+        <label>Нэвтрэх нэр</label>
+        <select class="inp" id="login-user">
+          <option value="">— Нэр сонгох —</option>
+        </select>
+      </div>
+      <div class="fld" style="text-align:left;margin-top:10px">
+        <label>Нууц үг</label>
+        <input class="inp" type="password" id="login-pw" placeholder="••••" autocomplete="current-password">
+      </div>
+      <button type="button" class="btn btn-p" id="login-btn" onclick="doLogin()" style="width:100%;margin-top:14px;padding:12px;font-size:14px">
+        🔐 Нэвтрэх
+      </button>
+      <div id="login-err" style="color:var(--red);font-size:12px;font-weight:700;margin-top:8px;min-height:16px;text-align:center"></div>
+    </div>
+
+    <div style="margin-top:12px;font-size:11px;color:var(--muted);font-weight:600">Системийн хувилбар 2.0</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     APP
+     ============================================================ -->
+<div id="app" style="display:none">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="logo"></div>
+    <div class="brand">
+      <div class="brand-name">Морьтон Адууны Төв</div>
+      <div class="brand-sub" id="hdr-sub">Эмчилгээний систем</div>
+    </div>
+    <div class="sync-dot" id="sync-dot" title="Sync төлөв"></div>
+    <div class="hdr-stats">
+      <div class="hdr-stat"><div class="hdr-stat-n" id="hs-w">0</div><div class="hdr-stat-l">Хүлээлт</div></div>
+      <div class="hdr-stat"><div class="hdr-stat-n" id="hs-t">0</div><div class="hdr-stat-l">Өнөөдөр</div></div>
+      <div class="hdr-stat"><div class="hdr-stat-n" id="hs-n">0</div><div class="hdr-stat-l">Нийт</div></div>
+    </div>
+    <button type="button" class="hdr-logout" onclick="logout()" title="Гарах">
+      <span class="hdr-logout-em">⏻</span>
+      <span class="hdr-logout-tx">Гарах</span>
+    </button>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+    <!-- SIDEBAR -->
+    <nav class="sb" id="sb">
+      <div class="sb-section">Үндсэн</div>
+      <div class="sb-list">
+        <div class="ni active" data-page="dashboard"><div class="ni-icon">📊</div><div class="ni-label">Хяналтын самбар</div></div>
+        <div class="ni" data-page="register"><div class="ni-icon">🐴</div><div class="ni-label">Адуу бүртгэл</div></div>
+      </div>
+      <div class="sb-section">Эмчилгээ</div>
+      <div class="sb-list">
+        <div class="ni" data-page="waiting"><div class="ni-icon">⏳</div><div class="ni-label">Хүлээж байгаа</div><span class="ni-badge" id="bdg-w">0</span></div>
+        <div class="ni" data-page="exam"><div class="ni-icon">🩺</div><div class="ni-label">Үзлэг / Эмчилгээ</div></div>
+        <div class="ni" data-page="inpatient"><div class="ni-icon">🏥</div><div class="ni-label">Байрлан эмчлүүлэх</div><span class="ni-badge b-p" id="bdg-i">0</span></div>
+        <div class="ni" data-page="planned"><div class="ni-icon">🗓️</div><div class="ni-label">Төлөвлөгөөт үзлэг</div></div>
+        <div class="ni" data-page="lab"><div class="ni-icon">🧪</div><div class="ni-label">Шинжилгээ</div><span class="ni-badge b-a" id="bdg-lab">0</span></div>
+        <div class="ni" data-page="review"><div class="ni-icon">👁️</div><div class="ni-label">Senior Veterinarianийн хяналт</div><span class="ni-badge" id="bdg-rv" style="display:none">0</span></div>
+        <div class="ni" data-page="pharmacy"><div class="ni-icon">💊</div><div class="ni-label">Эмийн сан</div><span class="ni-badge b-p" id="bdg-ph" style="display:none">0</span></div>
+      </div>
+      <div class="sb-section">Бүртгэл</div>
+      <div class="sb-list">
+        <div class="ni" data-page="finance"><div class="ni-icon">💰</div><div class="ni-label">Accountant / Finance</div><span class="ni-badge b-g" id="bdg-f">0</span></div>
+        <div class="ni" data-page="history"><div class="ni-icon">📋</div><div class="ni-label">Түүх</div></div>
+        <div class="ni" data-page="timesheet"><div class="ni-icon">🕒</div><div class="ni-label">Цагийн бүртгэл</div></div>
+      </div>
+      <div class="sb-section">Тайлан</div>
+      <div class="sb-list">
+        <div class="ni" data-page="kpi"><div class="ni-icon">📈</div><div class="ni-label">KPI самбар</div></div>
+        <div class="ni" data-page="report"><div class="ni-icon">📄</div><div class="ni-label">Тайлан</div></div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-list">
+          <div class="ni" id="ni-sync"><div class="ni-icon">💵</div><div class="ni-label">Үнэ оруулах</div></div>
+          <div class="ni" data-page="admin"><div class="ni-icon">⚙️</div><div class="ni-label">Системийн тохиргоо</div></div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- MOBILE DRAWER -->
+    <div class="drawer-bd" id="drawer-bd"></div>
+    <nav class="drawer" id="drawer">
+      <div class="drawer-hdr">
+        <div class="drawer-hdr-name" style="display:flex;align-items:center;gap:10px"><span class="drawer-logo"></span>Морьтон Адууны Төв</div>
+        <div class="drawer-hdr-sub" id="drawer-sub">Эмчилгээний систем</div>
+      </div>
+      <div class="sb-section" style="color:var(--gold);opacity:0.85">Үндсэн</div>
+      <div class="sb-list">
+        <div class="ni" data-page="dashboard"><div class="ni-icon">📊</div><div class="ni-label">Хяналтын самбар</div></div>
+        <div class="ni" data-page="register"><div class="ni-icon">🐴</div><div class="ni-label">Адуу бүртгэл</div></div>
+      </div>
+      <div class="sb-section" style="color:var(--gold);opacity:0.85">Эмчилгээ</div>
+      <div class="sb-list">
+        <div class="ni" data-page="waiting"><div class="ni-icon">⏳</div><div class="ni-label">Хүлээж байгаа</div><span class="ni-badge" id="bdg-w2">0</span></div>
+        <div class="ni" data-page="exam"><div class="ni-icon">🩺</div><div class="ni-label">Үзлэг / Эмчилгээ</div></div>
+        <div class="ni" data-page="inpatient"><div class="ni-icon">🏥</div><div class="ni-label">Байрлан эмчлүүлэх</div><span class="ni-badge b-p" id="bdg-i2">0</span></div>
+        <div class="ni" data-page="planned"><div class="ni-icon">🗓️</div><div class="ni-label">Төлөвлөгөөт үзлэг</div></div>
+        <div class="ni" data-page="lab"><div class="ni-icon">🧪</div><div class="ni-label">Шинжилгээ</div><span class="ni-badge b-a" id="bdg-lab2">0</span></div>
+        <div class="ni" data-page="review"><div class="ni-icon">👁️</div><div class="ni-label">Senior Veterinarianийн хяналт</div><span class="ni-badge" id="bdg-rv2" style="display:none">0</span></div>
+        <div class="ni" data-page="pharmacy"><div class="ni-icon">💊</div><div class="ni-label">Эмийн сан</div><span class="ni-badge b-p" id="bdg-ph2" style="display:none">0</span></div>
+      </div>
+      <div class="sb-section" style="color:var(--gold);opacity:0.85">Бүртгэл</div>
+      <div class="sb-list">
+        <div class="ni" data-page="finance"><div class="ni-icon">💰</div><div class="ni-label">Accountant / Finance</div><span class="ni-badge b-g" id="bdg-f2">0</span></div>
+        <div class="ni" data-page="history"><div class="ni-icon">📋</div><div class="ni-label">Түүх</div></div>
+        <div class="ni" data-page="timesheet"><div class="ni-icon">🕒</div><div class="ni-label">Цагийн бүртгэл</div></div>
+      </div>
+      <div class="sb-section" style="color:var(--gold);opacity:0.85">Тайлан</div>
+      <div class="sb-list">
+        <div class="ni" data-page="kpi"><div class="ni-icon">📈</div><div class="ni-label">KPI самбар</div></div>
+        <div class="ni" data-page="report"><div class="ni-icon">📄</div><div class="ni-label">Тайлан</div></div>
+      </div>
+      <div class="sb-bottom">
+        <div class="sb-list">
+          <div class="ni" id="ni-sync2"><div class="ni-icon">💵</div><div class="ni-label">Үнэ оруулах</div></div>
+          <div class="ni" data-page="admin"><div class="ni-icon">⚙️</div><div class="ni-label">Системийн тохиргоо</div></div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main" id="main">
+
+      <!-- ====== DASHBOARD ====== -->
+      <section class="page active" id="page-dashboard">
+        <div class="greet">
+          <div class="greet-l">
+            <div class="greet-t" id="greet-t">Сайн байна уу!</div>
+            <div class="greet-d" id="greet-d">Өнөөдөр</div>
+          </div>
+          <button class="btn" onclick="nav('register')">+ Шинэ бүртгэл</button>
+        </div>
+
+        <div id="d-alerts"></div>
+
+        <div class="stats">
+          <div class="stat green">
+            <div class="stat-l">🩺 Өнөөдөр үзсэн</div>
+            <div class="snum" id="d-today">0</div>
+            <div class="stat-d">Үзлэг дууссан</div>
+          </div>
+          <div class="stat purple">
+            <div class="stat-l">🏥 Байрлан эмчлүүлж буй</div>
+            <div class="snum" id="d-inp">0</div>
+            <div class="stat-d">Одоо эмнэлэгт</div>
+          </div>
+          <div class="stat accent" id="d-rev-card">
+            <div class="stat-l">💰 Өнөөдрийн орлого</div>
+            <div class="snum" id="d-rev">₮0</div>
+            <div class="stat-d">Төлөгдсөн</div>
+          </div>
+          <div class="stat">
+            <div class="stat-l">📊 Энэ 7 хоногийн үзлэг</div>
+            <div class="snum" id="d-week">0</div>
+            <div class="stat-d">Даваагаас өнөөдөр</div>
+          </div>
+        </div>
+
+        <div class="col2">
+          <div class="card">
+            <div class="ch">👥 Хүний нөөц <span class="ch-r" id="d-staff-date">Өнөөдөр</span></div>
+            <div class="hr-section">
+              <div class="hr-block">
+                <div class="hr-title">🩺 Ажиллаж буй эмч</div>
+                <div class="list" id="d-staff-active"></div>
+              </div>
+              <div class="hr-block" style="margin-top:14px">
+                <div class="hr-title">🌙 Жижүүр эмч</div>
+                <div class="list" id="d-staff-duty"></div>
+              </div>
+              <div style="margin-top:10px;text-align:right;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+                <button class="btn btn-sm" onclick="openScheduleModal()">🗓️ Сарын хувиар</button>
+                <button class="btn btn-sm" onclick="openStaffModal()">⚙️ Тохируулах</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="ch">🕐 Сүүлийн үзлэгүүд <span class="ch-r" id="d-r-cnt">0</span></div>
+            <div class="r-scroll">
+              <div class="list" id="d-r-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== REGISTER ====== -->
+      <section class="page" id="page-register">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">🐴 Адуу бүртгэл</div>
+            <div class="ph-sub">Шинэ адуу болон эзний мэдээлэл</div>
+          </div>
+        </div>
+
+        <div class="card" style="border:2px solid var(--orange);background:var(--orange-soft)">
+          <div class="ch">🔢 Үзлэгийн хуудасны дугаар</div>
+          <div class="fg r2">
+            <div class="fld">
+              <label>Дугаар <span class="req">*</span></label>
+              <input class="inp" id="r-examnum" placeholder="ж: 090311" inputmode="numeric" style="font-weight:800;font-size:16px;letter-spacing:0.5px">
+            </div>
+            <div class="fld" style="justify-content:flex-end">
+              <label>&nbsp;</label>
+              <button type="button" class="btn btn-sm" onclick="autoFillExamNum()">↻ Автомат</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch">🐴 Адууны мэдээлэл</div>
+          <div class="fg r3">
+            <div class="fld"><label>Зүс / Нэр <span class="req">*</span></label><input class="inp" id="r-name" placeholder="ж: Хээр халтар"></div>
+            <div class="fld"><label>Нас</label><input class="inp" type="number" id="r-age" placeholder="0" min="0" max="40"></div>
+            <div class="fld"><label>Үүлдэр</label><input class="inp" id="r-breed" placeholder="ж: Монгол"></div>
+          </div>
+          <div class="fg r3">
+            <div class="fld"><label>ИАБД <span style="font-weight:400;color:var(--muted,#999);font-size:11px">(Ирсэн адууны бүртгэлийн дугаар)</span></label><input class="inp" id="r-iabd" placeholder="ж: ИАБД-12345"></div>
+            <div class="fld"><label>Тэмдэглэгээ</label><input class="inp" id="r-mark" placeholder="Эм / Соёо / Бусад"></div>
+            <div class="fld"><label>Огноо</label><input class="inp" type="date" id="r-date"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch">👤 Эзний мэдээлэл</div>
+          <div class="fg r3">
+            <div class="fld"><label>Эзний нэр <span class="req">*</span></label><input class="inp" id="r-owner" placeholder="Овог нэр"></div>
+            <div class="fld"><label>Утас <span class="req">*</span></label><input class="inp" id="r-phone" placeholder="9999-9999" inputmode="tel"></div>
+            <div class="fld"><label>Нэмэлт утас</label><input class="inp" id="r-phone2" placeholder="" inputmode="tel"></div>
+          </div>
+          <div class="fg r2">
+            <div class="fld"><label>Аймаг</label>
+              <select class="inp" id="r-prov">
+                <option value="">— Сонгох —</option>
+              </select>
+            </div>
+            <div class="fld"><label>Сум / Дүүрэг</label><input class="inp" id="r-soum"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch">📝 Анамнез</div>
+          <div class="fg">
+            <div class="fld"><label>Шинж тэмдэг <span class="req">*</span></label>
+              <textarea class="inp" id="r-symp" rows="3" placeholder="Юу болсон, хэзээ эхэлсэн..."></textarea>
+            </div>
+          </div>
+          <div class="fg r2">
+            <div class="fld"><label>Яаралтай байдал</label>
+              <select class="inp" id="r-urg">
+                <option value="green">🟢 Хэвийн</option>
+                <option value="yellow">🟡 Анхаарах</option>
+                <option value="red">🔴 Яаралтай</option>
+              </select>
+            </div>
+            <div class="fld"><label>Нэмэлт</label><input class="inp" id="r-extra" placeholder=""></div>
+          </div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px">
+            <button class="btn" onclick="clearReg()">🔄 Цэвэрлэх</button>
+            <button class="btn btn-p" onclick="submitReg()">✅ Бүртгэж хүлээлгэнд оруулах</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== WAITING ====== -->
+      <section class="page" id="page-waiting">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">⏳ Хүлээж байгаа</div>
+            <div class="ph-sub" id="w-sub">0 адуу үзлэг хүлээж байна</div>
+          </div>
+          <div class="ph-r"><button class="btn btn-p btn-sm" onclick="nav('register')">+ Бүртгэх</button></div>
+        </div>
+
+        <div class="card">
+          <div class="ch">📋 Жагсаалт <span class="ch-r" id="w-cnt">0</span></div>
+          <div class="w-scroll">
+            <div class="list" id="w-list"></div>
+          </div>
+        </div>
+
+        <div class="card" id="w-detail-card">
+          <div class="ch" id="w-detail-title">📌 Дэлгэрэнгүй</div>
+          <div id="w-detail-body">
+            <div class="empty">
+              <div class="empty-em">🐴</div>
+              Дээрх жагсаалтаас адуу сонгоно уу
+            </div>
+          </div>
+          <div class="row" id="w-detail-actions" style="justify-content:flex-end;margin-top:12px;display:none">
+            <button class="btn btn-r btn-sm" onclick="removeWaiting()">✕ Хасах</button>
+            <button class="btn btn-p" onclick="startExamFromWaiting()">🩺 Үзлэг эхлүүлэх</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== EXAM ====== -->
+      <section class="page" id="page-exam">
+        <div class="exam-wrap">
+          <div class="exam-bar">
+            <div class="exam-bar-l">
+              <div class="exam-bar-t" id="ex-title">🩺 Үзлэг сонгогдоогүй</div>
+              <div class="exam-bar-s" id="ex-sub">Эзэн / Утас</div>
+            </div>
+            <button class="btn btn-sm" onclick="nav('waiting')">← Буцах</button>
+          </div>
+
+          <div class="card" id="ex-empty">
+            <div class="empty">
+              <div class="empty-em">🩺</div>
+              Үзлэг эхлүүлэхийн тулд "Хүлээж байгаа" хэсгээс адуу сонгоно уу.
+            </div>
+          </div>
+
+          <div id="ex-content" class="hidden">
+            <div class="card">
+              <div class="tabs">
+                <button class="tab active" data-etab="doc">👨‍⚕️ Эмч</button>
+                <button class="tab" data-etab="vis">📋 Үзлэг</button>
+                <button class="tab" data-etab="svc">💊 Үйлчилгээ</button>
+                <button class="tab" data-etab="note">📝 Тэмдэглэл</button>
+              </div>
+            </div>
+
+            <!-- DOC TAB -->
+            <div class="card etab" data-etab="doc">
+              <div class="ch">👨‍⚕️ Эмч сонгох</div>
+              <div class="fg r2">
+                <div class="fld">
+                  <label>Үзлэг хийсэн эмч <span class="req">*</span></label>
+                  <select class="inp" id="ex-doc-main"></select>
+                </div>
+                <div class="fld">
+                  <label>Хамтарсан эмч</label>
+                  <select class="inp" id="ex-doc-asst">
+                    <option value="">— Сонгох —</option>
+                  </select>
+                </div>
+              </div>
+              <div class="fg r2" style="margin-top:8px">
+                <div class="fld"><label>Огноо</label><input class="inp" type="date" id="ex-date"></div>
+                <div class="fld"><label>Цаг</label><input class="inp" type="time" id="ex-time"></div>
+              </div>
+              <div class="fld"><label>🔢 Үзлэгийн хуудасны дугаар</label><input class="inp" id="ex-num" readonly style="font-weight:800;font-size:16px;letter-spacing:0.5px;background:var(--orange-soft);color:var(--orange-dark);border:1.5px solid var(--orange);cursor:not-allowed"></div>
+            </div>
+
+            <!-- VIS TAB -->
+            <div class="card etab hidden" data-etab="vis">
+              <div class="ch">📋 Үзлэгийн үзүүлэлт</div>
+              <div class="fg r4">
+                <div class="fld"><label>Темп (°C)</label><input class="inp" type="number" step="0.1" id="ex-temp" placeholder="38.0"></div>
+                <div class="fld"><label>Зүрхний цохилт</label><input class="inp" type="number" id="ex-pulse" placeholder="40"></div>
+                <div class="fld"><label>Амьсгал</label><input class="inp" type="number" id="ex-resp" placeholder="12"></div>
+                <div class="fld"><label>Жин (кг)</label><input class="inp" type="number" id="ex-wt" placeholder="350"></div>
+              </div>
+              <div class="fld" style="margin-top:8px"><label>Онош</label>
+                <textarea class="inp" id="ex-diag" rows="3" placeholder="Үндсэн болон хавсарсан онош..."></textarea>
+              </div>
+              <div class="fld" style="margin-top:8px"><label>Шинж тэмдэг</label>
+                <div class="row" id="ex-symptoms" style="gap:6px"></div>
+              </div>
+            </div>
+
+            <!-- SVC TAB -->
+            <div class="card etab hidden" data-etab="svc">
+              <div class="ch">💊 Үйлчилгээ нэмэх</div>
+              <div class="svc-grid">
+                <div>
+                  <input class="inp" id="svc-search" placeholder="🔍 Үйлчилгээ хайх...">
+                  <div class="svc-list" id="svc-list" style="margin-top:8px"></div>
+                </div>
+                <div>
+                  <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Сонгогдсон</div>
+                  <div id="svc-selected"></div>
+                  <div class="svc-total">
+                    <div>НИЙТ ДҮН:</div>
+                    <div class="svc-total-amt" id="svc-total">₮0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- NOTE TAB -->
+            <div class="card etab hidden" data-etab="note">
+              <div class="ch">📝 Тэмдэглэл ба эмийн жор</div>
+              <div class="fld"><label>Тэмдэглэл</label>
+                <textarea class="inp" id="ex-note" rows="4" placeholder="Эмчийн нэмэлт зөвлөгөө, дараагийн үзлэгийн хугацаа..."></textarea>
+              </div>
+              <div class="fld" style="margin-top:8px">
+                <label>📷 Зураг (шарх, эмгэг, оношилгоо)</label>
+                <div id="ex-images" class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"></div>
+                <input type="file" id="ex-img-input" accept="image/*" multiple capture="environment" style="display:none" onchange="addExamImages(this.files); this.value='';">
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('ex-img-input').click()">➕ Зураг нэмэх</button>
+                <div class="muted" style="font-size:11px;margin-top:4px">Утаснаас зураг авах эсвэл сонгох. Дээд тал нь 6 зураг.</div>
+              </div>
+              <div class="fld" style="margin-top:8px">
+                <label>Эмийн жор (хайж нэмэх)</label>
+                <div class="dd">
+                  <input class="inp" id="med-search" placeholder="Эм хайх... (жш: Амоксициллин)">
+                  <div class="dd-list" id="med-list"></div>
+                </div>
+                <div class="chips" id="med-chips" style="margin-top:8px"></div>
+                <textarea class="inp hidden" id="ex-meds" rows="2"></textarea>
+              </div>
+              <div class="row" style="justify-content:flex-end;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+                <button class="btn btn-g" onclick="finishExam()">✅ Дуусгах ба нэхэмжлэх үүсгэх</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="row" style="justify-content:flex-end">
+                <button class="btn" onclick="cancelExam()">← Буцах</button>
+                <button class="btn btn-n" onclick="moveToInpatient()">🏥 Байрлуулах</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== INPATIENT ====== -->
+      <section class="page" id="page-inpatient">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">🏥 Байрлан эмчлүүлэх</div>
+            <div class="ph-sub" id="inp-sub">0 адуу байрлаж байна</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <span>🛏️ Байрлан эмчлүүлж буй адууд</span>
+            <div class="row" style="gap:4px;flex-wrap:wrap" id="inp-views">
+              <button type="button" class="btn btn-xs inp-view-btn on" data-view="cards" onclick="setInpView('cards')">🗂 Карт</button>
+              <button type="button" class="btn btn-xs inp-view-btn" data-view="loc" onclick="setInpView('loc')">📍 Байрлалаар</button>
+              <button type="button" class="btn btn-xs inp-view-btn" data-view="doc" onclick="setInpView('doc')">👨‍⚕️ Эмчээр</button>
+              <button type="button" class="btn btn-xs inp-view-btn" data-view="days" onclick="setInpView('days')" title="Хэдэн хоногтой адуу хэд байгааг бүлгээр">📅 Хоногоор</button>
+              <button type="button" class="btn btn-xs inp-view-btn" data-view="out" onclick="setInpView('out')" title="Гарсан адууд — хэн, хэзээ гаргасан; андуурсан бол буцаан байрлуулах">🚪 Гарсан</button>
+            </div>
+          </div>
+          <div id="inp-summary" class="inp-summary"></div>
+          <div id="inp-days-strip" class="inp-days-strip"></div>
+          <div class="fg" style="margin-bottom:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+            <div class="fld"><label>Эмч</label><select class="inp" id="inp-f-doc" onchange="renderInpatient()"></select></div>
+            <div class="fld"><label>Байрлал</label><select class="inp" id="inp-f-loc" onchange="renderInpatient()"></select></div>
+            <div class="fld"><label>📅 Хоног</label><select class="inp" id="inp-f-days" onchange="INP_DAYS_F=this.value;INP_PAGE=1;renderInpatient()"></select></div>
+            <div class="fld"><label>Хайх</label><input class="inp" id="inp-f-q" placeholder="Бүх утгаар: зүс, эзэн, утас, онош, үзлэгийн №, эмч, эм, тэмдэглэл, огноо..." title="Хэд хэдэн үг бичвэл бүгдийг нь агуулсан адууг олно" oninput="renderInpatient()"></div>
+            <div class="fld"><label>Эрэмбэ</label>
+              <select class="inp" id="inp-f-sort" onchange="renderInpatient()">
+                <option value="days_desc">Хоног (их → бага)</option>
+                <option value="days_asc">Хоног (бага → их)</option>
+                <option value="due_desc">Дутуу төлбөр (их → бага)</option>
+                <option value="name">Зүс (А → Я)</option>
+                <option value="loc">Байрлал</option>
+              </select>
+            </div>
+          </div>
+          <div class="list" id="inp-list"></div>
+        </div>
+
+        <div class="card hidden" id="inp-detail-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="ch" id="inp-detail-title" style="margin-bottom:0">📌 Дэлгэрэнгүй</div>
+            <div class="row" style="gap:6px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-p" onclick="printInpBook()" title="Эмчилгээний дэвтэр (эмнэлзүйн хуудас, мөнгөгүй)">📖 Эмчилгээний дэвтэр</button>
+              <button class="btn btn-sm" onclick="printInpatientCard()" title="Төлбөрийн тооцоотой хуудас">🧾 Төлбөрийн хуудас</button>
+            </div>
+          </div>
+
+          <!-- Tab nav -->
+          <div class="tabs" style="margin-bottom:10px">
+            <button class="tab active" data-itab="info">🐴 Адууны мэдээлэл</button>
+            <button class="tab" data-itab="treat">📋 Эмчилгээний бүртгэл</button>
+            <button class="tab" data-itab="fin">💰 Төлбөр тооцоо</button>
+          </div>
+
+          <!-- TAB 1: INFO -->
+          <div class="itab" data-itab="info">
+            <div id="inp-info-body"></div>
+            <!-- 📞 Эзэнд мэдээлсэн тэмдэглэл (3 хоносон сануулга) -->
+            <div id="inp-call-card" style="margin-top:14px">
+              <div class="ch">📞 Эзэнд мэдээлсэн тэмдэглэл</div>
+              <div id="inp-call-alert" style="margin-bottom:8px"></div>
+              <div id="inp-call-form" style="background:var(--input);border-radius:10px;padding:10px;margin-bottom:8px">
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <div class="fld" style="flex:0 1 180px;min-width:140px"><label>Үр дүн</label>
+                    <select class="inp" id="inp-call-status"><option value="talked">✅ Call Connected</option><option value="noanswer">📵 No Answer</option><option value="msg">✉️ Left Message</option></select></div>
+                  <div class="fld" style="flex:1 1 240px"><label>Юу ярьсан</label>
+                    <textarea class="inp" id="inp-call-note" rows="2" placeholder="ж: Биеийн байдал сайжирч байгааг хэлсэн. Эзэн 2 хоногийн дараа ирж авна. Төлбөрийн талаар ярьсан..."></textarea></div>
+                </div>
+                <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="addInpCall()">📞 Тэмдэглэл хадгалах</button>
+              </div>
+              <div id="inp-call-list"></div>
+            </div>
+            <div class="ch" style="margin-top:14px">📜 Өдөр өдрөөр</div>
+            <div id="inp-summary-list"></div>
+          </div>
+
+          <!-- TAB 2: TREATMENT -->
+          <div class="itab hidden" data-itab="treat">
+            <div id="inp-course-card"></div>
+            <div id="inp-plan-today"></div>
+            <div class="ch">📋 Өдрийн эмчилгээний бүртгэл</div>
+            <div class="fg r3">
+              <div class="fld"><label>Огноо <span style="font-size:10px;color:var(--muted);font-weight:400">(нөхөж бүртгэх бол өдрийг өөрчилнэ)</span></label><input class="inp" type="date" id="inp-log-date" onchange="onInpLogDateChange()"></div>
+              <div class="fld"><label>Эмч</label>
+                <select class="inp" id="inp-log-doc"></select>
+              </div>
+              <div class="fld"><label>⏰ Цаг <span style="font-size:10px;color:var(--muted);font-weight:400">(Өдрийн мэдээнд)</span></label>
+                <select class="inp" id="inp-log-slot"><option value="">— заагаагүй —</option><option>Өглөө</option><option>Өдөр</option><option>Орой</option><option>Шөнө</option></select>
+              </div>
+            </div>
+            <div class="fg r3">
+              <div class="fld"><label>Темп (°C)</label><input class="inp" type="number" step="0.1" id="inp-temp" placeholder="38.0"></div>
+              <div class="fld"><label>Зүрхний цохилт</label><input class="inp" type="number" id="inp-pulse" placeholder="40"></div>
+              <div class="fld"><label>Жин (кг)</label><input class="inp" type="number" id="inp-wt" placeholder="350"></div>
+            </div>
+            <div class="fld"><label>Онош / Биеийн байдал</label>
+              <textarea class="inp" id="inp-diag" rows="2" placeholder="Тухайн өдрийн биеийн байдал, шинж тэмдэг..."></textarea>
+            </div>
+            <div class="fld"><label>Хийсэн эмчилгээ / Тэмдэглэл</label>
+              <textarea class="inp" id="inp-note" rows="3" placeholder="Эмчилгээний үйлдэл, дусал, тариа..."></textarea>
+            </div>
+            <div class="fld"><label>Эмийн жор (хайж нэмэх)</label>
+              <div class="dd">
+                <input class="inp" id="inp-med-search" placeholder="Эм хайх...">
+                <div class="dd-list" id="inp-med-list"></div>
+              </div>
+              <div class="chips" id="inp-med-chips" style="margin-top:6px"></div>
+            </div>
+            <div class="fld"><label>Үйлчилгээ нэмэх</label>
+              <div class="dd">
+                <input class="inp" id="inp-svc-search" placeholder="Үйлчилгээ хайх...">
+                <div class="dd-list" id="inp-svc-list"></div>
+              </div>
+              <div id="inp-svc-chips" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+            </div>
+            <div class="fld"><label>➕ Гараар дүн нэмэх <span style="font-size:10px;color:var(--muted);font-weight:400">(жагсаалтад байхгүй эмчилгээ / эм, эсвэл зөвхөн дүн)</span></label>
+              <div class="row" style="gap:6px;flex-wrap:wrap;align-items:stretch">
+                <select class="inp" id="inp-man-kind" style="max-width:130px;flex:0 0 auto"><option value="svc">💊 Эмчилгээ</option><option value="med">💉 Эм</option></select>
+                <input class="inp" id="inp-man-name" placeholder="Нэр / тайлбар (заавал биш)" style="flex:1;min-width:150px">
+                <input class="inp" type="number" id="inp-man-amt" placeholder="Дүн ₮" min="0" style="width:120px;flex:0 0 auto" onkeydown="if(event.key==='Enter'){event.preventDefault();addInpManualItem();}">
+                <button class="btn btn-sm" type="button" onclick="addInpManualItem()" style="flex:0 0 auto">Нэмэх</button>
+              </div>
+            </div>
+            <div class="fg r2">
+              <div class="fld">
+                <label>Тухайн өдрийн үйлчилгээний дүн (автомат)</label>
+                <input class="inp" id="inp-day-amt" readonly style="font-weight:800;color:var(--orange-dark);background:var(--orange-soft)">
+              </div>
+              <div class="fld" style="justify-content:flex-end">
+                <label>&nbsp;</label>
+                <button class="btn btn-p" onclick="addInpLog()">💾 Өдрийн бичлэг хадгалах</button>
+              </div>
+            </div>
+
+            <!-- 🗓 Маргаашийн эмчилгээний төлөвлөгөө -->
+            <div id="inp-plan-card" style="margin-top:16px;background:var(--purple-soft);border-radius:12px;padding:10px 12px">
+              <div class="ch" style="margin-bottom:6px">🗓 Маргаашийн эмчилгээний төлөвлөгөө</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div class="fld" style="flex:0 1 170px;min-width:140px"><label>Аль өдрийн</label><input class="inp" type="date" id="inp-plan-date" onchange="onInpPlanDateChange()"></div>
+                <div class="fld" style="flex:1 1 240px"><label>Төлөвлөгөө</label><textarea class="inp" id="inp-plan-text" rows="3" placeholder="ж: Дусал 2л (NaCl), антибиотик үргэлжлүүлэх, шархны боолт солих, 10:00-д ЭХО давтах..."></textarea></div>
+              </div>
+              <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                <button class="btn btn-sm btn-p" type="button" onclick="saveInpPlan()">💾 Төлөвлөгөө хадгалах</button>
+                <span class="muted" style="font-size:11px">Маргааш энэ адууны эмчилгээний маягтын дээр «📌 төлөвлөгөө» болж харагдана, «⤵ Маягтад татах»-аар бөглөнө.</span>
+              </div>
+            </div>
+
+            <div class="ch" style="margin-top:18px">📜 Бүртгэгдсэн өдрүүд</div>
+            <div class="row" style="margin-bottom:8px;flex-wrap:wrap">
+              <input class="inp" type="date" id="inp-filter-date" style="max-width:180px" onchange="renderIDetail()">
+              <button class="btn btn-sm" onclick="$('#inp-filter-date').value='';renderIDetail()">Бүгд</button>
+            </div>
+            <div id="inp-log"></div>
+          </div>
+
+          <!-- TAB 3: FINANCE -->
+          <div class="itab hidden" data-itab="fin">
+            <div class="ch">💰 Хоногийн төлбөр</div>
+            <div class="fg r2">
+              <div class="fld">
+                <label>Хоногт төлөх төлбөр (₮)</label>
+                <input class="inp" type="number" id="inp-daily-fee" placeholder="80000" oninput="updateDailyFee()" style="font-weight:800">
+              </div>
+              <div class="fld" style="justify-content:flex-end">
+                <label>&nbsp;</label>
+                <div style="font-size:12px;color:var(--muted);font-weight:600">Анхдагч: ₮80,000 / хоног</div>
+              </div>
+            </div>
+
+            <div class="ch" style="margin-top:14px">📊 Өдөр өдрийн дүн</div>
+            <div id="inp-fin-list"></div>
+
+            <div class="ch" style="margin-top:14px">💵 Үзлэгийн төлбөр / Урьдчилгаа</div>
+            <div id="inp-prepay-summary"></div>
+            <div class="row" style="justify-content:flex-end;margin-top:6px" id="inp-prepay-row">
+              <button class="btn btn-sm btn-p" onclick="openInpPrepay()">+ Урьдчилгаа нэмэх</button>
+            </div>
+
+            <div class="ch" style="margin-top:14px">📋 Нэгтгэл</div>
+            <div id="inp-fin-summary"></div>
+          </div>
+
+          <!-- Гарсан адууны карт нээхэд харагдах мөр (renderIDetail бөглөнө) -->
+          <div id="inp-discharged-bar" class="hidden" style="margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--gold-soft,#f6efdc);font-size:12.5px"></div>
+          <!-- Action buttons (always visible at bottom) -->
+          <div class="row" id="inp-action-row" style="justify-content:flex-end;margin-top:14px;gap:6px;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--border)">
+            <button class="btn btn-sm" id="inp-cancel-btn" onclick="cancelInpatient()" title="Андуурч байрлуулсан бол хүлээлт рүү буцаах">↩ Хүлээлт рүү буцаах</button>
+            <button class="btn btn-r btn-sm" onclick="dischargeInpatient()">🚪 Гаргах ба эцсийн төлбөр</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== 🕒 ЦАГИЙН БҮРТГЭЛ ====== -->
+      <section class="page" id="page-timesheet">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">🕒 Цагийн бүртгэл</div>
+            <div class="ph-sub" id="ts-sub">—</div>
+          </div>
+          <div class="ph-r" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <input class="inp" type="month" id="ts-month" onchange="tsOnMonth(this.value)" style="max-width:160px">
+            <select class="inp" id="ts-range" onchange="tsOnRange(this.value)" style="max-width:170px">
+              <option value="full">Бүтэн сар</option><option value="h1">1–15 (эхний хагас)</option><option value="h2">16–сарын эцэс</option>
+            </select>
+          </div>
+        </div>
+        <div class="tabs" style="margin-bottom:10px">
+          <button class="tab active" data-tstab="grid">📅 Сарын хүснэгт</button>
+          <button class="tab" data-tstab="emps">👥 Ажилтнууд</button>
+        </div>
+        <div class="tstab" data-tstab="grid" id="ts-grid"></div>
+        <div class="tstab hidden" data-tstab="emps" id="ts-emps"></div>
+      </section>
+
+      <!-- ====== 💊 ЭМИЙН САН ====== -->
+      <section class="page" id="page-pharmacy">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">💊 Эмийн сан</div>
+            <div class="ph-sub" id="ph-sub">—</div>
+          </div>
+          <div class="ph-r" style="display:flex;gap:6px;flex-wrap:wrap">
+            <input class="inp" type="date" id="ph-date" onchange="renderPharmacy()" style="max-width:160px" title="Аль өдрийн эм">
+            <input class="inp" id="ph-q" placeholder="🔍 Адуу, эзэн, эм, байрлал..." oninput="renderPharmacy()" style="min-width:200px">
+          </div>
+        </div>
+        <div class="tabs" style="margin-bottom:10px">
+          <button class="tab active" data-phtab="today">📋 Өдрийн эм</button>
+          <button class="tab" data-phtab="catalog">📚 Эмийн каталог (үнэ)</button>
+          <button class="tab" data-phtab="usage">📊 Хэрэглээ</button>
+        </div>
+        <div class="phtab" data-phtab="today" id="ph-today"></div>
+        <div class="phtab hidden" data-phtab="catalog" id="ph-catalog"></div>
+        <div class="phtab hidden" data-phtab="usage" id="ph-usage"></div>
+      </section>
+
+      <!-- ====== LAB (ШИНЖИЛГЭЭ) ====== -->
+      <section class="page" id="page-lab">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">🧪 Шинжилгээ</div>
+            <div class="ph-sub" id="lab-sub">0 хүлээгдэж буй</div>
+          </div>
+          <div class="ph-r" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <input class="inp" id="lab-search" placeholder="🔍 Адуу, эзэн, шинжилгээ, эмч..."
+              oninput="onLabSearch(this.value)" style="min-width:230px">
+            <button class="btn btn-p btn-sm" type="button" onclick="openLabSampleModal()" title="Адуу ирэхгүйгээр цус/сорьц авчирсан үед — үзлэгийн дугаар зарцуулахгүй, Accountant / Financeд нэхэмжлэх үүснэ">🩸 Сорьц хүлээн авах</button>
+          </div>
+        </div>
+
+        <div class="tabs" id="lab-tabs"></div>
+
+        <div class="card">
+          <div class="ch">🧾 Захиалгууд <span class="ch-r" id="lab-cnt">0</span></div>
+          <div class="list" id="lab-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="ch">👥 Шинжилгээ үзэх эрхтэй хүмүүс</div>
+          <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+            Эрхийг Системийн тохиргоо → Нэвтрэх эрх хэсгээс өөрчилнө.
+          </div>
+          <div class="list" id="lab-viewers"></div>
+        </div>
+      </section>
+
+      <!-- ====== 👁️ АХЛАХ ЭМЧИЙН ХЯНАЛТ ====== -->
+      <section class="page" id="page-review">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">👁️ Senior Veterinarianийн хяналт</div>
+            <div class="ph-sub">Онош батлах · өдрийн эмчилгээ бичсэн эсэх · эзэнд мэдээлэх</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tabs" style="margin-bottom:12px">
+            <button class="tab active" data-rvtab="dx" onclick="setReviewTab('dx')">🩺 Онош батлах<span id="rv-n-dx"></span></button>
+            <button class="tab" data-rvtab="treat" onclick="setReviewTab('treat')">📝 Өдрийн эмчилгээ<span id="rv-n-treat"></span></button>
+            <button class="tab" data-rvtab="call" onclick="setReviewTab('call')">📞 Эзэнд мэдээлэх<span id="rv-n-call"></span></button>
+          </div>
+          <div id="rv-body"></div>
+        </div>
+      </section>
+
+      <!-- ====== PLANNED (ТӨЛӨВЛӨГӨӨТ ҮЗЛЭГ) ====== -->
+      <section class="page" id="page-planned">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">🗓️ Төлөвлөгөөт үзлэг</div>
+            <div class="ph-sub">Хээрийн явц — 3 эмчийн баг, 3–5 аймаг; цаасан маягтыг системд шивэх</div>
+          </div>
+        </div>
+        <div class="grid2" style="display:grid;grid-template-columns:360px 1fr;gap:14px;align-items:start">
+          <div>
+            <div class="card">
+              <div class="ch">➕ Шинэ явц</div>
+              <div class="fg r2">
+                <div class="fld"><label>Эхэлсэн огноо *</label><input class="inp" type="date" id="pl-t-date"></div>
+                <div class="fld"><label>Дууссан огноо</label><input class="inp" type="date" id="pl-t-end"></div>
+              </div>
+              <div class="fld" style="margin-top:8px"><label>Маршрут — явсан аймгууд *</label><input class="inp" id="pl-t-route" placeholder="ж: Хэнтий, Сүхбаатар, Дорнод"></div>
+              <div class="fld" style="margin-top:8px"><label>Багийн эмч 1 (ахлах)</label><select class="inp" id="pl-t-doc1"></select></div>
+              <div class="fg r2" style="margin-top:8px">
+                <div class="fld"><label>Эмч 2</label><select class="inp" id="pl-t-doc2"></select></div>
+                <div class="fld"><label>Эмч 3</label><select class="inp" id="pl-t-doc3"></select></div>
+              </div>
+              <div class="fld" style="margin-top:8px"><label>Тэмдэглэл</label><input class="inp" id="pl-t-note" placeholder="ж: намрын төлөвлөгөөт үзлэг, туулга"></div>
+              <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="saveTrip()">🗓️ Явц үүсгэх</button>
+            </div>
+            <div class="card">
+              <div class="ch">📚 Явцууд</div>
+              <div class="list" id="pl-trip-list" style="max-height:60vh;overflow-y:auto"></div>
+            </div>
+          </div>
+          <div id="pl-detail"></div>
+        </div>
+      </section>
+
+      <!-- ====== FINANCE ====== -->
+      <section class="page" id="page-finance">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">💰 Accountant / Finance</div>
+            <div class="ph-sub">Нэхэмжлэх ба орлого</div>
+          </div>
+          <div class="ph-r">
+            <button class="btn btn-sm" onclick="exportCSV()">⬇ CSV</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="tabs">
+            <button class="tab active" data-ftab="pending">💳 Хүлээгдэж буй <span id="ft-p">0</span></button>
+            <button class="tab" data-ftab="receivable">🧾 Авлага <span id="ft-r">0</span></button>
+            <button class="tab" data-ftab="paid">✅ Төлөгдсөн <span id="ft-d">0</span></button>
+            <button class="tab" data-ftab="ledger">📒 Эмчилгээний авлага <span id="ft-l">0</span></button>
+            <button class="tab" data-ftab="sum">📊 Тойм</button>
+            <button class="tab" data-ftab="bonus">🎁 Урамшуулал</button>
+          </div>
+        </div>
+
+        <!-- 🔎 Шүүлт (Хүлээгдэж буй / Авлага / Төлөгдсөн / Эмчилгээний авлага) -->
+        <div class="card" id="f-filter-card">
+          <div class="fg r6" style="align-items:end">
+            <div class="fld"><label>Огнооноос</label><input class="inp" type="date" id="f-from" onchange="onFinFilterChange()"></div>
+            <div class="fld"><label>Огноо хүртэл</label><input class="inp" type="date" id="f-to" onchange="onFinFilterChange()"></div>
+            <div class="fld"><label>Эмч</label><select class="inp" id="f-doc" onchange="onFinFilterChange()"><option value="">Бүх эмч</option></select></div>
+            <div class="fld"><label>Төрөл</label>
+              <select class="inp" id="f-kind" onchange="onKindFilterChange('f-kind')">
+                <option value="all">Бүгд</option><option value="clinic">Клиник үзлэг</option><option value="inpatient">Байрлан эмчилгээ</option><option value="planned">Төлөвлөгөөт (ТҮ)</option><option value="lab">🩸 Шинжилгээ (сорьц)</option>
+              </select>
+            </div>
+            <div class="fld"><label>Төлбөрийн хэлбэр</label>
+              <select class="inp" id="f-method" onchange="onFinFilterChange()">
+                <option value="">Бүгд</option><option>бэлэн</option><option>карт</option><option>QPay</option><option>дансаар</option><option>шилжүүлэг</option><option>зээл</option><option>хосолсон</option>
+              </select>
+            </div>
+            <div class="fld"><label>Хайх</label><input class="inp" id="f-q" placeholder="Зүс / эзэн / утас / дугаар" oninput="onFinFilterChange()"></div>
+          </div>
+          <div class="row" style="gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+            <span class="muted" style="font-size:11.5px" id="f-filter-info"></span>
+            <button class="btn btn-xs" onclick="resetFinFilter()">✕ Шүүлт цэвэрлэх</button>
+          </div>
+        </div>
+
+        <!-- 📒 Эмчилгээний авлага — эзнээр нэгтгэсэн тайлан -->
+        <div class="ftab hidden" data-ftab="ledger">
+          <div class="card">
+            <div class="ch" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <span>📒 Эмчилгээний авлага — эзнээр</span>
+              <div class="row" style="gap:6px;flex-wrap:wrap">
+                <button class="btn btn-sm" onclick="printFinLedger()">🖨️ Хэвлэх / PDF</button>
+                <button class="btn btn-sm" onclick="exportFinLedgerCSV()">⬇ CSV (Excel)</button>
+              </div>
+            </div>
+            <div id="fin-ledger-body"></div>
+          </div>
+        </div>
+
+        <!-- 🎁 эмчийн үзлэгийн урамшуулал -->
+        <div class="ftab hidden" data-ftab="bonus">
+          <div class="card">
+            <div class="row" style="gap:8px;flex-wrap:wrap">
+              <div class="fld" style="min-width:160px"><label>Сар</label><input class="inp" type="month" id="bn-month" onchange="renderBonus()"></div>
+              <div class="fld" style="min-width:180px"><label>Салбар / аймаг</label><select class="inp" id="bn-prov" onchange="renderBonus()"><option value="">Бүх салбар / аймаг</option></select></div>
+              <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><div class="row" style="gap:6px">
+                <button class="btn btn-sm btn-p" onclick="renderBonus()">🔄 Тооцох</button>
+                <button class="btn btn-sm" onclick="printBonus()">🖨️ Хэвлэх / PDF</button>
+                <button class="btn btn-sm" onclick="exportBonusCSV()">⬇ CSV (Excel)</button>
+              </div></div>
+            </div>
+          </div>
+          <div class="card" id="bn-body"><div class="empty"><div class="empty-em">🎁</div>Сар сонгоод «Тооцох» дарна уу</div></div>
+        </div>
+
+        <!-- pending -->
+        <div class="ftab" data-ftab="pending">
+          <div class="col2">
+            <div class="card">
+              <div class="ch">📋 Хүлээгдэж буй нэхэмжлэх</div>
+              <div class="list" id="fin-pending-list"></div>
+            </div>
+            <div class="card" id="fin-detail-card">
+              <div class="ch">📌 Дэлгэрэнгүй</div>
+              <div id="fin-detail-body">
+                <div class="empty">
+                  <div class="empty-em">📄</div>
+                  Нэхэмжлэх сонгоно уу.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- receivables -->
+        <div class="ftab hidden" data-ftab="receivable">
+          <div class="col2">
+            <div class="card">
+              <div class="ch">🧾 Авлагатай үлдсэн нэхэмжлэх</div>
+              <div class="list" id="fin-recv-list"></div>
+            </div>
+            <div class="card" id="fin-recv-detail-card">
+              <div class="ch">📌 Дэлгэрэнгүй</div>
+              <div id="fin-recv-detail-body">
+                <div class="empty">
+                  <div class="empty-em">🧾</div>
+                  Авлага сонгоно уу.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- paid -->
+        <div class="ftab hidden" data-ftab="paid">
+          <div class="card">
+            <div class="ch">✅ Төлөгдсөн бүртгэлүүд</div>
+            <div id="f-hint"></div>
+            <div class="tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+              <table style="min-width:760px">
+                <thead><tr>
+                  <th style="width:36px">#</th><th style="width:88px">Дугаар</th><th style="width:100px">Огноо</th><th style="width:96px">ИАБД</th><th style="width:150px;max-width:150px">Адуу</th><th style="width:120px">Эзэн</th><th>Дүн</th><th>Хэлбэр</th><th>Цаг</th><th style="width:88px">Үйлдэл</th>
+                </tr></thead>
+                <tbody id="fin-paid-tb"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- summary -->
+        <div class="ftab hidden" data-ftab="sum">
+          <div class="stats">
+            <div class="stat green"><div class="stat-l">📅 Өнөөдөр</div><div class="snum" id="sm-today">₮0</div><div class="stat-d">Орлого</div></div>
+            <div class="stat accent"><div class="stat-l">📆 7 хоног</div><div class="snum" id="sm-week">₮0</div><div class="stat-d">Орлого</div></div>
+            <div class="stat purple"><div class="stat-l">📊 Энэ сар</div><div class="snum" id="sm-month">₮0</div><div class="stat-d">Орлого</div></div>
+          </div>
+
+          <div class="card">
+            <div class="ch">💳 Энэ сарын төлбөрийн хэлбэр</div>
+            <div id="sm-pay-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="ch">🏥 Байрлан эмчилгээний орлогын задаргаа <span class="muted" style="font-weight:600;text-transform:none">— энэ сар, төлөгдсөн</span></div>
+            <div id="sm-inp-breakdown"></div>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><div class="stat-l">🧾 Сарын бичлэг</div><div class="snum" id="sm-cnt">0</div></div>
+            <div class="stat"><div class="stat-l">💵 Дундаж дүн</div><div class="snum" id="sm-avg">₮0</div></div>
+            <div class="stat red"><div class="stat-l">⏳ Хүлээгдэж буй</div><div class="snum" id="sm-pcnt">0</div></div>
+            <div class="stat red"><div class="stat-l">💰 Хүлээгдэх ₮</div><div class="snum" id="sm-pamt">₮0</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== KPI ====== -->
+      <section class="page" id="page-kpi">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">📈 KPI самбар</div>
+            <div class="ph-sub">Эмчийн гүйцэтгэл, ажилласан өдөр</div>
+          </div>
+          <div class="ph-r"><select class="inp" id="k-kind" style="width:auto;padding:6px 10px;font-size:12px" onchange="onKindFilterChange('k-kind')"><option value="all">Бүх үзлэг</option><option value="clinic">Зөвхөн клиник</option><option value="planned">Зөвхөн төлөвлөгөөт (ТҮ)</option></select><span id="k-fin-lock"></span></div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <div class="tabs" style="flex:1;min-width:0">
+              <button class="tab active" data-kper="d">Өнөөдөр</button>
+              <button class="tab" data-kper="w">Энэ 7 хоног</button>
+              <button class="tab" data-kper="m">Энэ сар</button>
+              <button class="tab" data-kper="y">Энэ жил</button>
+              <button class="tab" data-kper="c">Custom</button>
+            </div>
+          </div>
+          <div id="k-custom-row" class="row hidden" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:140px">
+              <label>Эхлэх</label>
+              <input class="inp" type="date" id="k-from">
+            </div>
+            <div class="fld" style="flex:1;min-width:140px">
+              <label>Дуусах</label>
+              <input class="inp" type="date" id="k-to">
+            </div>
+            <div class="fld" style="flex-shrink:0;justify-content:flex-end">
+              <label>&nbsp;</label>
+              <button class="btn btn-sm btn-p" onclick="renderKPI()">🔍 Хайх</button>
+            </div>
+          </div>
+          <div id="k-period-info" class="muted" style="font-size:11.5px;font-weight:600;margin-top:6px;text-align:right"></div>
+        </div>
+
+        <div id="k-summary" style="margin-bottom:14px"></div>
+
+        <div class="col2">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <div class="ch" style="margin:0;flex:1;min-width:120px">🏆 Эмчийн ранк</div>
+              <select class="inp" id="k-sort" style="width:auto;min-width:150px;padding:6px 10px;font-size:12px">
+                <option value="exams">Үзлэгийн тоогоор</option>
+                <option value="services">Үйлчилгээгээр</option>
+                <option value="days">Ажилласан өдрөөр</option>
+                <option value="horses">Адууны тоогоор</option>
+                <option value="rev">Орлогоор</option>
+              </select>
+            </div>
+            <div class="list" id="k-rank-list" style="margin-top:8px"></div>
+            <div class="ch" style="margin-top:14px">📅 Ажилласан өдөр — эмч нарын харьцуулалт</div>
+            <div id="k-days-chart"></div>
+          </div>
+          <div class="card" id="k-doc-detail-card">
+            <div class="ch" id="k-doc-detail-title">📊 Дэлгэрэнгүй</div>
+            <div id="k-doc-detail-body">
+              <div class="empty">
+                <div class="empty-em">👨‍⚕️</div>
+                Эмч сонгоно уу
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== REPORT ====== -->
+      <section class="page" id="page-report">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">📄 Тайлан</div>
+            <div class="ph-sub">Хугацаа, эмч сонгож тайлан үүсгэх</div>
+          </div>
+          <div class="ph-r"><select class="inp" id="rp-kind" style="width:auto;padding:6px 10px;font-size:12px" onchange="onKindFilterChange('rp-kind')"><option value="all">Бүх үзлэг</option><option value="clinic">Зөвхөн клиник</option><option value="planned">Зөвхөн төлөвлөгөөт (ТҮ)</option></select><span id="rp-fin-lock"></span></div>
+        </div>
+
+        <!-- 📋 Өдрийн мэдээ (салбарын өдөр бүрийн мэдээ) — dailyreport.js зурна -->
+        <div class="card" id="dr-card"></div>
+
+        <div class="card">
+          <div class="tabs">
+            <button class="tab active" data-rper="d">Өдөр</button>
+            <button class="tab" data-rper="w">7 хоног</button>
+            <button class="tab" data-rper="m">Сар</button>
+            <button class="tab" data-rper="y">Жил</button>
+            <button class="tab" data-rper="c">Custom</button>
+          </div>
+
+          <!-- Day picker -->
+          <div id="rp-day-row" class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:160px">
+              <label>Огноо</label>
+              <input class="inp" type="date" id="rp-date">
+            </div>
+          </div>
+
+          <!-- Week picker -->
+          <div id="rp-week-row" class="row hidden" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:160px">
+              <label>7 хоног (Даваагийн өдөр)</label>
+              <input class="inp" type="date" id="rp-week">
+            </div>
+          </div>
+
+          <!-- Month picker -->
+          <div id="rp-month-row" class="row hidden" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:160px">
+              <label>Сар</label>
+              <input class="inp" type="month" id="rp-month">
+            </div>
+          </div>
+
+          <!-- Year picker -->
+          <div id="rp-year-row" class="row hidden" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:160px">
+              <label>Жил</label>
+              <input class="inp" type="number" id="rp-year" min="2020" max="2100" placeholder="2026">
+            </div>
+          </div>
+
+          <!-- Custom range -->
+          <div id="rp-custom-row" class="row hidden" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:140px">
+              <label>Эхлэх</label>
+              <input class="inp" type="date" id="rp-from">
+            </div>
+            <div class="fld" style="flex:1;min-width:140px">
+              <label>Дуусах</label>
+              <input class="inp" type="date" id="rp-to">
+            </div>
+          </div>
+
+          <!-- Doctor picker -->
+          <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:220px">
+              <label>👨‍⚕️ Эмч</label>
+              <select class="inp" id="rp-doc">
+                <option value="">👥 Бүх эмч (ерөнхий тайлан)</option>
+              </select>
+            </div>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:4px">Эмч сонговол тухайн эмчийн үзсэн бүх адуу, хийсэн үйлчилгээ, эм, онош, байрлан эмчлүүлэх бичлэг дэлгэрэнгүй гарна. «Бүх эмч» бол эмнэлгийн ерөнхий тайлан.</div>
+
+          <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-p" onclick="genReport()">🔄 Үүсгэх</button>
+            <button class="btn" onclick="window.print()">🖨️ Хэвлэх / PDF</button>
+            <button class="btn hidden" id="rp-csv-btn" onclick="exportReportCSV()">⬇ CSV (Excel)</button>
+            <div id="rp-period-info" class="muted" style="font-size:12px;font-weight:600;margin-left:auto;align-self:center"></div>
+          </div>
+        </div>
+
+        <div class="card" id="rp-preview">
+          <div class="empty">
+            <div class="empty-em">📄</div>
+            Хугацаа сонгоод "Үүсгэх" дарна уу.
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== HISTORY ====== -->
+      <section class="page" id="page-history">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">📋 Түүх</div>
+            <div class="ph-sub">Бүх үзлэгийн бүртгэл</div>
+          </div>
+          <div class="ph-r"><select class="inp" id="h-kind" style="width:auto;padding:6px 10px;font-size:12px" onchange="onKindFilterChange('h-kind')"><option value="all">Бүх үзлэг</option><option value="clinic">Зөвхөн клиник</option><option value="planned">Зөвхөн төлөвлөгөөт (ТҮ)</option></select><button class="btn btn-sm" onclick="exportHistCSV()">⬇ CSV</button></div>
+        </div>
+
+        <div class="card">
+          <div class="fg r3">
+            <div class="fld"><label>Хайх</label><input class="inp" id="h-q" placeholder="Зүс / Эзэн / Утас / ИАБД / Анамнез / Онош..."></div>
+            <div class="fld"><label>Огнооноос</label><input class="inp" type="date" id="h-from"></div>
+            <div class="fld"><label>Огноо хүртэл</label><input class="inp" type="date" id="h-to"></div>
+          </div>
+          <div id="h-hint"></div>
+          <div class="fg r2" style="margin-top:8px">
+            <div class="fld"><label>Эрэмбэлэх</label>
+              <select class="inp" id="h-sort" onchange="renderHistory()">
+                <option value="time_desc">Бүртгэсэн (шинэ → хуучин)</option>
+                <option value="date_desc">Огноо (шинэ → хуучин)</option>
+                <option value="date_asc">Огноо (хуучин → шинэ)</option>
+                <option value="num_desc">Үзлэгийн дугаар (их → бага)</option>
+                <option value="num_asc">Үзлэгийн дугаар (бага → их)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px">
+            <button class="btn btn-sm" onclick="clearHistFilter()">Цэвэрлэх</button>
+            <button class="btn btn-sm btn-p" onclick="renderHistory()">🔍 Хайх</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ch">📜 Бүртгэлүүд <span class="ch-r" id="h-cnt">0</span></div>
+          <div class="tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <table style="min-width:820px">
+              <thead><tr>
+                <th style="width:36px">#</th>
+                <th class="h-sortable" onclick="histSortBy('num')" style="cursor:pointer;user-select:none;width:88px">Дугаар <span id="h-ar-num" class="h-arrow"></span></th>
+                <th class="h-sortable" onclick="histSortBy('date')" style="cursor:pointer;user-select:none;width:100px">Огноо <span id="h-ar-date" class="h-arrow"></span></th>
+                <th style="width:96px">ИАБД</th>
+                <th style="width:150px;max-width:150px">Зүс</th><th style="width:120px">Эзэн</th><th style="width:100px">Утас</th><th>Онош</th><th class="h-amt-col">Дүн</th><th class="h-amt-col">Статус</th><th style="width:44px"></th>
+              </tr></thead>
+              <tbody id="h-tb"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== ADMIN ====== -->
+      <section class="page" id="page-admin">
+        <div class="ph">
+          <div class="ph-l">
+            <div class="ph-title">⚙️ Системийн тохиргоо</div>
+            <div class="ph-sub">Эмч, өгөгдөл, sync</div>
+          </div>
+        </div>
+
+        <div class="col2">
+          <div class="card">
+            <div class="ch">👨‍⚕️ Эмч нэмэх</div>
+            <div class="fg r2">
+              <div class="fld"><label>Нэр</label><input class="inp" id="a-doc-name"></div>
+              <div class="fld"><label>Зэрэг</label>
+                <select class="inp" id="a-doc-role">
+                  <option>Chief Veterinarian</option>
+                  <option>Senior Veterinarian</option>
+                  <option>Veterinarian</option>
+                  <option>Intern Veterinarian</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-p btn-sm" onclick="addDoc()">+ Нэмэх</button>
+            <div class="ch" style="margin-top:14px">Бүртгэлтэй эмч нар</div>
+            <div class="list" id="a-doc-list"></div>
+          </div>
+          <div class="card" id="inp-loc-card">
+            <div class="ch">📍 Байрлан эмчлүүлэх байрлалууд <span class="muted" style="font-weight:600;text-transform:none">— зүчээ, нарлагаа</span></div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Мөр бүрд нэг байрлал. Байрлан эмчлүүлэх хуудсан дээр адуу бүрд байрлал сонгож, «Байрлалаар» харах горимд чөлөөтэй/эзэнтэй байрлал харагдана.</div>
+            <textarea class="inp" id="inp-loc-list" rows="6" style="font-family:inherit"></textarea>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-sm btn-p" onclick="saveInpLocationsFromForm()">💾 Хадгалах</button>
+              <button class="btn btn-sm" onclick="resetInpLocations()">↺ Анхдагч (Зүчээ 1–5, Нарлагаа 1–10)</button>
+              <span class="muted" style="font-size:11px" id="inp-loc-status"></span>
+            </div>
+          </div>
+          <div class="card" id="call-cfg-card">
+            <div class="ch">📞 Эзэнд мэдээлэх сануулга <span class="muted" style="font-weight:600;text-transform:none">— байрлан эмчлүүлэх</span></div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Адуу энэ хоног хоноход эмчлэгч эмчид «эзэнд залгах» сануулга гарна (карт, самбар, Senior Veterinarianийн хяналт). Эмч «✅ Call Connected» тэмдэглэл бичмэгц сануулга арилна.</div>
+            <div class="fg r2">
+              <div class="fld"><label>Хэдэн хоноход</label><input class="inp" type="number" id="call-cfg-first" min="1" max="60" placeholder="3"></div>
+              <div class="fld"><label>Дараа нь хэдэн хоног тутам (0 = давтахгүй)</label><input class="inp" type="number" id="call-cfg-rep" min="0" max="60" placeholder="0"></div>
+            </div>
+            <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="saveCallCfgFromForm()">💾 Хадгалах</button>
+          </div>
+          <div class="card" id="examnum-cfg-card">
+            <div class="ch">🔢 Үзлэгийн хуудасны дугаарлалт</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Адуу бүртгэхэд дугаар автоматаар: <b>max(эхлэх дугаар, бүртгэгдсэн хамгийн их дугаар) + 1</b>. Эхлэх дугаараас доош хуучин цувралын дугаарууд тооцогдохгүй — шинэ цуврал эхлүүлэхдээ энд сүүлийн дугаараа бичнэ.</div>
+            <div class="fg r2">
+              <div class="fld"><label>Сүүлд ашигласан дугаар</label><input class="inp" type="number" id="en-cfg-start" placeholder="90310"></div>
+              <div class="fld"><label>Шинэ цуврал эхэлсэн огноо</label><input class="inp" type="date" id="en-cfg-since"></div>
+              <div class="fld"><label>Оронгийн тоо</label><input class="inp" type="number" id="en-cfg-pad" min="0" max="12"></div>
+              <div class="fld"><label>Угтвар (заавал биш)</label><input class="inp" id="en-cfg-prefix" placeholder="ж: A-"></div>
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:6px">Зөвхөн «эхэлсэн огноо»-с хойш бүртгэгдсэн, эхлэх дугаараас дээш дугааруудыг тооцно — хуучин бичлэгийн урт/буруу дугаар (ж: 559342) дараагийн дугаарт нөлөөлөхгүй.</div>
+            <div id="en-cfg-info" style="margin-top:8px;font-size:13px"></div>
+            <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="saveExamNumCfgFromForm()">💾 Хадгалах</button>
+          </div>
+          <div class="card" id="bonus-cfg-card">
+            <div class="ch">🎁 Эмчийн үзлэгийн урамшуулал</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Accountant / Finance → Урамшуулал цэсэнд сар бүрийн урамшууллыг үзлэгийн бүртгэлээс автоматаар тооцно. Нэг үзлэг (нэг адуу) бүрд:</div>
+            <div class="fg r3">
+              <div class="fld"><label>Ганцаараа хийсэн ₮</label><input class="inp" type="number" id="bn-cfg-alone"></div>
+              <div class="fld"><label>Хамтарсан — үндсэн эмч ₮</label><input class="inp" type="number" id="bn-cfg-main"></div>
+              <div class="fld"><label>Хамтарсан — хамтрагч ₮</label><input class="inp" type="number" id="bn-cfg-assist"></div>
+            </div>
+            <div class="fg r2" style="margin-top:8px">
+              <div class="fld"><label>«Зонд» ангилал — үйлчилгээний нэрэнд агуулагдах үг</label><input class="inp" id="bn-cfg-zond"></div>
+              <div class="fld"><label>«Дуудлага» ангилал — үйлчилгээний нэр эхлэх үг</label><input class="inp" id="bn-cfg-call"></div>
+            </div>
+            <div class="fg r3" style="margin-top:8px">
+              <div class="fld"><label>Батлав (хэвлэхэд)</label><input class="inp" id="bn-cfg-approver"></div>
+              <div class="fld"><label>Хянасан</label><input class="inp" id="bn-cfg-checker"></div>
+              <div class="fld"><label>Нягтлан бодогч</label><input class="inp" id="bn-cfg-acc"></div>
+            </div>
+            <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="saveBonusCfgFromForm()">💾 Хадгалах</button>
+          </div>
+          <div class="card" id="fin-pin-card">
+            <div class="ch">🔒 Мөнгөн дүн харах код</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Тайлан болон KPI самбар дээр мөнгөн дүн анхдагчаар нуугдана. Энэ кодыг оруулсан хүн 30 минут дүнг харна. Код бүх төхөөрөмжид нэг.</div>
+            <div id="a-fin-pin-status" style="margin-bottom:8px"></div>
+            <div class="fg r2">
+              <div class="fld"><label>Шинэ код</label><input class="inp" type="password" id="a-fin-pin" autocomplete="new-password" placeholder="дор хаяж 4 тэмдэгт"></div>
+              <div class="fld"><label>Давтах</label><input class="inp" type="password" id="a-fin-pin2" autocomplete="new-password"></div>
+            </div>
+            <button class="btn btn-p btn-sm" style="margin-top:8px" onclick="saveFinPin()">💾 Код хадгалах</button>
+          </div>
+          <div class="card" id="user-mgmt-card">
+            <div class="ch">🔐 Нэвтрэх эрх (хэрэглэгч)</div>
+            <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+              Энд нэмсэн хэрэглэгч бүх төхөөрөмж дээр нэвтэрч чадна. Код өөрчлөх шаардлагагүй.
+            </div>
+            <button class="btn btn-p btn-sm" onclick="openUserModal()">+ Хэрэглэгч нэмэх</button>
+            <div class="ch" style="margin-top:14px">Бүртгэлтэй хэрэглэгчид <span class="muted" id="user-count" style="font-weight:600"></span></div>
+            <div class="list" id="a-user-list"></div>
+          </div>
+          <div class="card">
+            <div class="ch">🧪 Шинжилгээ үзэх эрхтэй <span class="muted" id="lab-perm-count" style="font-weight:600"></span></div>
+            <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+              "Шинжилгээ" хуудсын эрхтэй хэрэглэгчид. Дээрх "Нэвтрэх эрх" хэсгээс өөрчилнө.
+            </div>
+            <div class="list" id="a-lab-perm-list"></div>
+          </div>
+          <div class="card" id="lab-svc-card">
+            <div class="ch">🧬 Аль үйлчилгээ нь шинжилгээ вэ</div>
+            <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+              Нэрэндээ "шинжилгээ" гэсэн үгтэй үйлчилгээг автоматаар таньдаг. Доороос нэмж/хасаж болно.
+            </div>
+            <input class="inp" id="lab-svc-search" placeholder="🔍 Үйлчилгээ хайх" oninput="renderLabSvcConfig()" style="margin-bottom:8px">
+            <div style="max-height:340px;overflow:auto" id="lab-svc-list"></div>
+          </div>
+          <div class="card">
+            <div class="ch">📋 Үйлдлийн лог</div>
+            <div class="list" id="a-log-list"><div class="empty"><div class="empty-em">📋</div>Sync хийсний дараа харагдана</div></div>
+          </div>
+          <div class="card" id="deleted-exams-card">
+            <div class="ch">🗑️ Устгасан үзлэгийн архив <span class="muted" id="del-exam-count" style="font-weight:600"></span></div>
+            <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+              Устгагдсан үзлэгийн хуудсыг зөвхөн харах боломжтой (сэргээх боломжгүй).
+            </div>
+            <div class="list" id="a-deleted-exam-list"></div>
+          </div>
+          <div class="card" id="export-card">
+            <div class="ch">☁️ Бүх дата татах <span class="muted" style="font-weight:600;text-transform:none">— Firebase-ээс шууд</span></div>
+            <div style="background:var(--gold-soft,#f6efdc);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.55">
+              Системийн <b>бүх</b> өгөгдлийг (адуу, үзлэг, санхүү, төлбөр, байрлан эмчлүүлэх, шинжилгээ, эмч, хэрэглэгч, хуваарь, үнэ, лог, устгасан архив) Firestore-оос эх хувиар нь татна. Excel нь хуудас бүрд задарсан, англи/монгол баганатай ба <b>талбарын тайлбар</b> хуудастай — өөр систем рүү шилжүүлэх, гуравдагч талд өгөхөд тохиромжтой.
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+              <div class="fld" style="min-width:150px"><label>Хэл / Language</label>
+                <select class="inp" id="ex-lang" onchange="renderExportSummary()">
+                  <option value="mn">🇲🇳 Монгол</option>
+                  <option value="en">🇬🇧 English</option>
+                </select>
+              </div>
+              <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><div class="row" style="gap:6px">
+                <button class="btn btn-sm btn-p" onclick="exportFullExcel()">📊 Excel (бүх хуудас)</button>
+                <button class="btn btn-sm" onclick="exportFullJSON()">🗄️ JSON (бүрэн нөөц)</button>
+                <button class="btn btn-sm" onclick="exportFullCSV()">📄 CSV багц</button>
+              </div></div>
+            </div>
+            <div id="ex-progress" style="margin-top:10px;min-height:22px"></div>
+            <div id="ex-summary" style="margin-top:6px"></div>
+            <div class="muted" style="font-size:11px;margin-top:8px">⚠️ Экспортод нууц үгийн hash, мөнгөн дүн харах код орохгүй. Үзлэгийн зурагнууд Firebase Storage-д үлдэх бөгөөд экспортод зөвхөн тэдгээрийн холбоос (URL) орно.</div>
+          </div>
+          <div class="card" id="storage-diag-card">
+            <div class="ch">🖼️ Зураг байршуулах оношилгоо <span class="muted" style="font-weight:600;text-transform:none">— Storage холболт шалгах</span></div>
+            <div style="background:var(--gold-soft,#f6efdc);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.55">
+              «Зураг илгээж чадсангүй» алдаа гарвал энд дарна. Нэвтрэлт, bucket, үзлэгийн зураг (<code>exam-images/</code>), шинжилгээний хариу (<code>lab-results/</code>) гурвыг тусад нь шалгаж, <b>яг юу буруу байгааг</b> хэлнэ. Туршилтын жижиг зураг илгээгээд шууд устгана.
+            </div>
+            <button class="btn btn-sm btn-p" onclick="runStorageDiag()">🔍 Шалгах</button>
+            <div id="sd-out" style="margin-top:10px"></div>
+          </div>
+          <div class="card">
+            <div class="ch">💾 Өгөгдөл <span class="muted" style="font-weight:600;text-transform:none">— хялбар нөөц</span></div>
+            <div class="row">
+              <button class="btn btn-sm" onclick="exportAll()">⬇ JSON татах</button>
+              <button class="btn btn-sm btn-p" onclick="exportExcel()">📊 Excel татах</button>
+              <button class="btn btn-sm" onclick="document.getElementById('imp-f').click()">⬆ JSON оруулах</button>
+              <input type="file" id="imp-f" accept=".json" style="display:none" onchange="importJSON(event)">
+            </div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn btn-r btn-sm" onclick="resetAll()">🗑️ Бүх өгөгдлийг устгах</button>
+            </div>
+
+            <div class="ch" style="margin-top:14px">☁️ Oracle Sync</div>
+            <div style="background:var(--green-soft);color:var(--green);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px">
+              ✅ Oracle Cloud-тай холбогдсон
+            </div>
+            <div class="fld"><label>Sync URL <span class="muted" style="font-weight:600;text-transform:none">(зөвхөн өөрчлөх шаардлагатай үед)</span></label>
+              <input class="inp" id="a-url" placeholder="Oracle ORDS URL">
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn btn-sm" onclick="saveSyncURL()">💾 Хадгалах</button>
+              <button class="btn btn-sm" onclick="resetSyncURL()">↻ Default рүү буцаах</button>
+              <button class="btn btn-sm btn-p" onclick="manualSync()">🔄 Татах</button>
+              <button class="btn btn-sm btn-p" onclick="fbForcePush()">☁️ Firebase руу бичих</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn btn-sm btn-p" style="background:#16a34a;border-color:#16a34a" onclick="if(confirm('Google Sheets-ээс бүх датаг татаж Firebase руу бичих үү? Энэ нь одоогийн датаг Sheets-ийн датагаар солино.')) migrateSheetsToFirebase()">⬇️ Sheets-ээс татаж Firebase руу зөөх</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn btn-sm btn-p" style="background:#7c3aed;border-color:#7c3aed" onclick="migrateImagesToStorage()">🖼️ Хуучин зургийг Storage руу зөөх</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bn" id="bn">
+    <button class="bn-i active" data-page="dashboard">
+      <span class="bn-ic"><svg class="bn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/><path d="M9.5 21v-6h5v6"/></svg></span>
+      <span class="bn-lbl">Самбар</span>
+    </button>
+    <button class="bn-i" data-page="register">
+      <span class="bn-ic"><svg class="bn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="8" y="2.5" width="8" height="4" rx="1"/><path d="M12 11v5M9.5 13.5h5"/></svg></span>
+      <span class="bn-lbl">Бүртгэл</span>
+    </button>
+    <button class="bn-i" data-page="waiting">
+      <span class="bn-dot" id="bn-dot-w"></span>
+      <span class="bn-ic"><svg class="bn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <span class="bn-lbl">Хүлээлт</span>
+    </button>
+    <button class="bn-i" data-page="exam">
+      <span class="bn-ic"><svg class="bn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"/><path d="M6 3H4M14 3h-2"/><path d="M10 17v.5a4.5 4.5 0 0 0 9 0V15"/><circle cx="19" cy="13" r="2"/></svg></span>
+      <span class="bn-lbl">Эмчилгээ</span>
+    </button>
+    <button class="bn-i" id="bn-menu">
+      <span class="bn-ic"><svg class="bn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+      <span class="bn-lbl">Цэс</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- LAB (ШИНЖИЛГЭЭ) DETAIL MODAL -->
+<!-- 🩸 Сорьц шууд хүлээн авах (адуугүй) -->
+<div class="mod-bd" id="lab-sample-modal">
+  <div class="mod" style="max-width:640px">
+    <div class="mod-h">
+      <span class="mod-title">🩸 Сорьц хүлээн авах — адуу ирээгүй</span>
+      <button class="btn btn-r btn-xs" onclick="closeModal('lab-sample-modal')">✕</button>
+    </div>
+    <div class="mod-body">
+      <div style="background:var(--orange-soft);color:var(--orange-dark);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px">
+        Эзэн адуугаа авчрахгүйгээр цус (сорьц) авчирсан үед бүртгэнэ. Үзлэгийн хуудасны дугаар зарцуулахгүй; сонгосон шинжилгээ бүр захиалга болж «Сорьц авсан» төлөвтэй үүснэ; Accountant / Financeд нэг нэхэмжлэх үүснэ.
+      </div>
+      <div class="fg r2">
+        <div class="fld"><label>Эзэн *</label><input class="inp" id="ls-owner" placeholder="Эзний нэр"></div>
+        <div class="fld"><label>Утас</label><input class="inp" id="ls-phone" placeholder="99112233"></div>
+        <div class="fld" style="position:relative"><label>Адуу (зүс) <span class="muted" style="font-weight:400;font-size:10px">— бүртгэлтэй бол хайж холбоно</span></label>
+          <div class="dd"><input class="inp" id="ls-horse" placeholder="Зүс / эзэн / утсаар хайх..." autocomplete="off" oninput="onLabSampleHorseInput(this.value)" onblur="setTimeout(()=>{const l=document.getElementById('ls-horse-list'); if(l) l.classList.remove('show');},150)"><div class="dd-list" id="ls-horse-list"></div></div>
+          <div class="muted" id="ls-horse-link" style="font-size:11px;margin-top:3px"></div></div>
+        <div class="fld"><label>Сорьцын төрөл</label><select class="inp" id="ls-sample"></select></div>
+        <div class="fld"><label>Хүлээн авсан огноо</label><input class="inp" type="date" id="ls-date"></div>
+        <div class="fld"><label>Тэмдэглэл</label><input class="inp" id="ls-note" placeholder="ж: 2 хоолой, өглөө авсан..."></div>
+      </div>
+      <div class="ch" style="margin-top:10px">🧪 Шинжилгээ сонгох <span class="ch-r" id="ls-total">0</span></div>
+      <div id="ls-tests" style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto"></div>
+      <div class="row" style="justify-content:flex-end;gap:6px;margin-top:14px">
+        <button class="btn btn-sm" type="button" onclick="closeModal('lab-sample-modal')">Болих</button>
+        <button class="btn btn-p btn-sm" type="button" onclick="saveLabSample()">🩸 Бүртгэх ба нэхэмжлэх үүсгэх</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mod-bd" id="lab-modal">
+  <div class="mod" style="max-width:720px">
+    <div class="mod-h">
+      <span class="mod-title" id="lab-modal-title">🧪 Шинжилгээ</span>
+      <button class="btn btn-r btn-xs" onclick="closeModal('lab-modal')">✕</button>
+    </div>
+    <div class="mod-body">
+
+      <div class="ch">📌 Мэдээлэл</div>
+      <div id="lab-info" style="margin-bottom:14px"></div>
+
+      <div class="ch">🔄 Төлөв</div>
+      <div id="lab-steps" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      <div class="row" id="lab-actions" style="margin-bottom:16px"></div>
+
+      <div class="ch">🖼️ Хариу (зураг)</div>
+      <div id="lab-upload-wrap" style="margin-bottom:8px">
+        <button class="btn btn-p btn-sm" onclick="document.getElementById('lab-file').click()">📷 Зураг нэмэх</button>
+        <input type="file" id="lab-file" accept="image/*" multiple style="display:none"
+          onchange="addLabResultImages(this.getAttribute('data-lab'), this.files); this.value='';">
+      </div>
+      <div id="lab-results" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+
+      <div class="fld">
+        <label>Хариуны тайлбар</label>
+        <textarea class="inp" id="lab-result-note" rows="3" placeholder="Шинжилгээний дүгнэлт, тайлбар..."></textarea>
+      </div>
+      <button class="btn btn-sm" id="lab-note-btn" onclick="saveLabNote(_labCur)">💾 Тайлбар хадгалах</button>
+
+      <div class="ch" style="margin-top:16px">🕓 Түүх</div>
+      <div id="lab-history"></div>
+
+    </div>
+    <div class="mod-ft">
+      <button class="btn btn-sm" onclick="closeModal('lab-modal')">Хаах</button>
+    </div>
+  </div>
+</div>
+
+<!-- USER ADD/EDIT MODAL -->
+<div class="mod-bd" id="user-modal">
+  <div class="mod">
+    <div class="mod-h"><span class="mod-title">🔐 Хэрэглэгч</span><button class="btn btn-r btn-xs" onclick="closeModal('user-modal')">✕</button></div>
+    <div class="mod-body">
+      <div class="fld"><label>Нэвтрэх нэр <span style="color:var(--red)">*</span></label><input class="inp" id="u-name" placeholder="ж: Болормаа" autocomplete="off"></div>
+      <div class="fld"><label>Нууц үг <span style="color:var(--red)">*</span></label><input class="inp" id="u-pw" placeholder="Нууц үг" autocomplete="new-password"></div>
+      <div class="fld"><label>Зэрэг / Дүр</label>
+        <select class="inp" id="u-role" onchange="onUserRoleChange()"></select>
+        <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+          <input class="inp" id="u-role-new" placeholder="Шинэ дүр нэмэх (ж: Нярав, Жолооч)" autocomplete="off" style="flex:1;min-width:150px" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomRole();}">
+          <button type="button" class="btn btn-sm" onclick="addCustomRole()">➕ Дүр нэмэх</button>
+        </div>
+        <div id="u-role-custom" style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center"></div>
+      </div>
+      <div class="fld"><label>Хандах эрх (хуудсууд)</label>
+        <div id="u-pages" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+        <div class="muted" style="font-size:11px;margin-top:6px">Дүр сонгоход тухайн дүрийн ердийн эрх автоматаар тэмдэглэгдэнэ. Хүсвэл доор нь өөрчилж болно.</div>
+      </div>
+      <div class="fld"><label>🧪 Шинжилгээний эрх</label>
+        <button type="button" id="u-lab-edit" data-on="0" onclick="toggleLabEdit()"
+          style="padding:8px 14px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--muted)">👁️ Зөвхөн үзэх</button>
+        <div class="muted" style="font-size:11px;margin-top:6px">"Шинжилгээ" хуудсын эрх нь ҮЗЭХ эрх. Энэ товч асаалттай бол төлөв солих, хариу оруулах ЗАСАХ эрхтэй болно.</div>
+      </div>
+      <div class="fld"><label>🩺 Онош батлах эрх</label>
+        <button type="button" id="u-dx-approve" data-on="0" onclick="toggleFlag('u-dx-approve')"
+          style="padding:8px 14px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--muted)">Онош батлахгүй</button>
+        <div class="muted" style="font-size:11px;margin-top:6px">Асаалттай хүн бусад эмчийн оношийг хянаж батална — батлагдсаны дараа л үйлчлүүлэгчид өгөх хуудсанд онош хэвлэгдэнэ. Түүний өөрийн үзлэг автоматаар батлагдана. Анхдагч: Senior Veterinarian.</div>
+      </div>
+      <div class="fld"><label>✏️ Бичлэг засах эрх</label>
+        <button type="button" id="u-edit-data" data-on="0" onclick="toggleFlag('u-edit-data')"
+          style="padding:8px 14px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--muted)">👁️ Зөвхөн үзэх</button>
+        <div class="muted" style="font-size:11px;margin-top:6px">Үзлэг, байрлан эмчлүүлэх (эмч/байрлал, гарсан огноо, буцаан байрлуулах) засах. Анхдагч: Chief Veterinarian, Senior Veterinarian, Admin. Устгах эрх зөвхөн Adminд.</div>
+      </div>
+    </div>
+    <div class="mod-ft">
+      <button class="btn btn-p btn-sm" onclick="saveUser()">💾 Хадгалах</button>
+      <button class="btn btn-r btn-sm" id="u-del-btn" onclick="deleteUser()" style="display:none">🗑️ Устгах</button>
+      <button class="btn btn-sm" onclick="closeModal('user-modal')">Болих</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT HORSE MODAL -->
+<div class="mod-bd" id="edit-horse-modal">
+  <div class="mod">
+    <div class="mod-h"><span class="mod-title">🐴 Морь засварлах</span><button class="btn btn-r btn-xs" onclick="closeModal('edit-horse-modal')">✕</button></div>
+    <div class="mod-body">
+      <div class="fld"><label>Морины нэр</label><input class="inp" id="eh-name" placeholder="Нэр"></div>
+      <div class="fld"><label>ИАБД (Ирсэн адууны бүртгэлийн дугаар)</label><input class="inp" id="eh-iabd" placeholder="ж: ИАБД-12345"></div>
+      <div class="fld"><label>Эзний нэр</label><input class="inp" id="eh-owner" placeholder="Эзний нэр"></div>
+      <div class="fld"><label>Утас</label><input class="inp" id="eh-phone" placeholder="Утасны дугаар"></div>
+      <div class="fld"><label>Үүлдэр</label><input class="inp" id="eh-breed" placeholder="Үүлдэр"></div>
+      <div class="fld"><label>Нас</label><input class="inp" id="eh-age" placeholder="Нас"></div>
+      <div class="fld"><label>Аймаг</label><input class="inp" id="eh-province" placeholder="Аймаг"></div>
+      <div class="fld"><label>Сум</label><input class="inp" id="eh-soum" placeholder="Сум"></div>
+    </div>
+    <div class="mod-ft">
+      <button class="btn btn-p btn-sm" onclick="saveEditHorse()">💾 Хадгалах</button>
+      <button class="btn btn-r btn-sm" id="eh-del-btn" onclick="deleteHorse(STATE._editHorse && STATE._editHorse.id)">🗑️ Устгах</button>
+      <button class="btn btn-sm" onclick="closeModal('edit-horse-modal')">Болих</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT EXAM MODAL -->
+<div class="mod-bd" id="edit-exam-modal">
+  <div class="mod">
+    <div class="mod-h"><span class="mod-title">🩺 Үзлэг засварлах</span><button class="btn btn-r btn-xs" onclick="closeModal('edit-exam-modal')">✕</button></div>
+    <div class="mod-body">
+      <div class="fld"><label>🔢 Үзлэгийн хуудасны дугаар</label><input class="inp" id="ee-examnum" placeholder="ж: 090311" inputmode="numeric" style="font-weight:800;letter-spacing:0.5px"></div>
+      <div class="fld"><label>Морь</label><input class="inp" id="ee-horse" readonly></div>
+      <div class="fld"><label>Эмч</label><input class="inp" id="ee-doctor" readonly></div>
+      <div class="fld"><label>Огноо</label><input class="inp" id="ee-date" readonly></div>
+      <div class="fld"><label>Оношилгоо</label><textarea class="inp" id="ee-diagnosis" rows="3" placeholder="Оношилгоо"></textarea></div>
+      <div class="fld">
+        <label>💊 Үйлчилгээ</label>
+        <input class="inp" id="ee-svc-search" placeholder="🔍 Үйлчилгээ хайж нэмэх...">
+        <div class="svc-list" id="ee-svc-list" style="margin-top:8px;max-height:180px"></div>
+        <div id="ee-svc-selected" style="margin-top:10px"></div>
+      </div>
+      <div class="fld"><label>Дүн (₮)</label><input class="inp" type="number" id="ee-amount" placeholder="0"></div>
+    </div>
+    <div class="mod-ft">
+      <button class="btn btn-p btn-sm" onclick="saveEditExam()">💾 Хадгалах</button>
+      <button class="btn btn-r btn-sm" id="ee-del-btn" onclick="deleteExam(STATE._editExam && STATE._editExam.id)">🗑️ Устгах</button>
+      <button class="btn btn-sm" onclick="closeModal('edit-exam-modal')">Болих</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETED EXAM DETAIL MODAL (Admin — зөвхөн харах) -->
+<div class="mod-bd" id="deleted-exam-modal">
+  <div class="mod">
+    <div class="mod-h"><span class="mod-title">🗑️ Устгасан үзлэг</span><button class="btn btn-r btn-xs" onclick="closeModal('deleted-exam-modal')">✕</button></div>
+    <div class="mod-body" id="deleted-exam-detail-body"></div>
+    <div class="mod-ft">
+      <button class="btn btn-sm" onclick="closeModal('deleted-exam-modal')">Хаах</button>
+    </div>
+  </div>
+</div>
+
+<!-- SERVICE PRICES MODAL (үйлчилгээний үнэ — Admin) -->
+<div class="mod-bd" id="service-prices-modal">
+  <div class="mod" style="max-width:560px">
+    <div class="mod-h"><span class="mod-title">💵 Үйлчилгээний үнэ</span><button class="btn btn-r btn-xs" onclick="closeModal('service-prices-modal')">✕</button></div>
+    <div class="mod-body">
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input class="inp" id="sp-new-name" placeholder="➕ Шинэ үйлчилгээний нэр" style="flex:1;min-width:160px">
+        <input class="inp" id="sp-new-price" type="number" placeholder="Үнэ" style="width:100px">
+        <button class="btn btn-p btn-sm" onclick="addCustomService()">Нэмэх</button>
+      </div>
+      <input class="inp" id="sp-search" placeholder="🔍 Үйлчилгээ хайх..." style="margin-bottom:10px">
+      <div id="sp-list" style="max-height:55vh;overflow-y:auto"></div>
+    </div>
+    <div class="mod-ft">
+      <button class="btn btn-p btn-sm" onclick="saveServicePrices()">💾 Хадгалах</button>
+      <button class="btn btn-sm" onclick="restorePricesFromHistory()" title="Өмнөх үзлэгүүдэд ашигласан хамгийн сүүлийн үнээр хоосон талбарыг дүүргэнэ">🕘 Түүхээс сэргээх</button>
+      <button class="btn btn-sm" onclick="closeModal('service-prices-modal')">Болих</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="refresh-chip" class="rfr-chip" onclick="forceRefresh()" title="Өөр компьютер дээр өөрчлөлт орсон байна">🔄 Шинэ мэдээлэл ирлээ — шинэчлэх</div>
+<div id="toast"></div>
+
+<!-- STAFF (HR) MODAL -->
+<div class="mod-bd" id="staff-modal">
+  <div class="mod" style="max-width:520px">
+    <div class="mod-t">👥 Өнөөдрийн хүний нөөц</div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px">Чек тэмдэглэснээр өнөөдөр ажиллаж буй / жижүүр гэж хадгалагдана</div>
+    <div id="staff-mod-body"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('staff-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="saveStaff()">💾 Хадгалах</button>
+    </div>
+  </div>
+</div>
+
+<!-- САРЫН АЖЛЫН ХУВИАР MODAL -->
+<div class="mod-bd" id="schedule-modal">
+  <div class="mod" style="max-width:96vw;width:96vw">
+    <div class="mod-t">🗓️ Сарын ажлын хувиар</div>
+    <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <label class="fld" style="margin:0">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">Сар</span>
+        <input type="month" id="sched-month" onchange="changeSchedMonth()" style="display:block">
+      </label>
+      <div class="sched-legend">
+        <span class="sched-leg-item"><span class="sched-cell sched-work">А</span> Ажиллах</span>
+        <span class="sched-leg-item"><span class="sched-cell sched-duty">Ж</span> Жижүүр</span>
+        <span class="sched-leg-item"><span class="sched-cell sched-off">–</span> Амрах</span>
+      </div>
+      <div class="muted" style="font-size:12px;flex:1;min-width:160px">Нүд дээр дарж төлөв солино (Амрах → Ажиллах → Жижүүр)</div>
+    </div>
+    <div id="sched-grid-wrap" style="overflow:auto;max-height:62vh;border:1px solid var(--border);border-radius:8px"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('schedule-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="saveSchedule()">💾 Хадгалах</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXAM DETAIL MODAL (from Recent Exams) -->
+<div class="mod-bd" id="exam-detail-modal">
+  <div class="mod" style="max-width:600px">
+    <div class="mod-t" id="ex-detail-title">📋 Үзлэгийн дэлгэрэнгүй</div>
+    <div id="ex-detail-body"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('exam-detail-modal')">Хаах</button>
+      <button class="btn btn-p btn-sm" id="ex-detail-print-btn" onclick="" style="display:none">🖨️ Нэхэмжлэх хэвлэх</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🔒 FINANCE PIN MODAL -->
+<div class="mod-bd" id="sync-status-modal">
+  <div class="mod" style="max-width:440px">
+    <div class="mod-t">📊 Синкийн төлөв</div>
+    <div id="ss-body" style="font-size:12.5px"></div>
+    <div class="mod-actions" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-sm" onclick="closeModal('sync-status-modal')">Хаах</button>
+      <button class="btn btn-sm" onclick="resetLocalCache()" title="Энэ төхөөрөмжийн кэшийг цэвэрлээд сервэрээс бүгдийг дахин татна">🧹 Кэш цэвэрлэж дахин татах</button>
+      <button class="btn btn-p btn-sm" onclick="closeModal('sync-status-modal');forceRefresh()">🔄 Шинэчлэх</button>
+    </div>
+  </div>
+</div>
+<div class="mod-bd" id="fin-pin-modal">
+  <div class="mod" style="max-width:360px">
+    <div class="mod-t">🔑 Мөнгөн дүн харах код</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px">Тайлан, KPI дээрх мөнгөн дүнг харахын тулд кодоо оруулна уу. Код оруулсны дараа 30 минут харагдана.</div>
+    <div class="fld">
+      <label>Код</label>
+      <input class="inp" type="password" id="fin-pin-input" inputmode="numeric" autocomplete="off" placeholder="••••" onkeydown="if(event.key==='Enter'){event.preventDefault();submitFinPin();}">
+    </div>
+    <div id="fin-pin-err" style="color:var(--red);font-size:12px;font-weight:700;min-height:16px;margin-top:4px"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('fin-pin-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="submitFinPin()">🔓 Нээх</button>
+    </div>
+  </div>
+</div>
+
+<!-- INPATIENT PREPAYMENT MODAL -->
+<div class="mod-bd" id="inp-prepay-modal">
+  <div class="mod" style="max-width:480px">
+    <div class="mod-t">💵 Урьдчилгаа төлбөр нэмэх</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px" id="inp-prepay-info"></div>
+    <div class="fg r2">
+      <div class="fld"><label>Дүн</label>
+        <input class="inp" type="number" id="inp-prepay-amt" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="fld"><label>Хэлбэр</label>
+        <select class="inp" id="inp-prepay-method">
+          <option value="бэлэн">💵 Бэлэн</option>
+          <option value="карт">💳 Карт</option>
+          <option value="QPay">📱 QPay</option>
+          <option value="дансаар">🏦 Дансаар</option>
+        </select>
+      </div>
+    </div>
+    <div class="fld"><label>Зориулалт</label>
+      <select class="inp" id="inp-prepay-purpose">
+        <option value="Үзлэгийн төлбөр">🩺 Үзлэгийн төлбөр</option>
+        <option value="Урьдчилгаа">💵 Урьдчилгаа төлбөр</option>
+        <option value="Нэмэлт төлбөр">➕ Нэмэлт төлбөр</option>
+      </select>
+    </div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('inp-prepay-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="saveInpPrepay()">💾 Хадгалах</button>
+    </div>
+  </div>
+</div>
+
+<!-- DISCHARGE / FINAL INVOICE MODAL -->
+<div class="mod-bd" id="inp-discharge-modal">
+  <div class="mod" style="max-width:600px">
+    <div class="mod-t">🚪 Гаргах ба эцсийн нэхэмжлэх</div>
+    <div id="inp-discharge-body"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('inp-discharge-modal')">Болих</button>
+      <button class="btn btn-g btn-sm" onclick="confirmDischarge()">🚪 Гаргах ба нэхэмжлэх үүсгэх</button>
+    </div>
+  </div>
+</div>
+
+<!-- FIX DISCHARGE DATE MODAL -->
+<div class="mod-bd" id="inp-fixdate-modal">
+  <div class="mod" style="max-width:520px">
+    <div class="mod-t">🗓 Гарсан огноог засах</div>
+    <div id="inp-fixdate-body"></div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('inp-fixdate-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="saveDischargeDateFix()">💾 Хадгалах ба дахин тооцох</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="mod-bd" id="pay-modal">
+  <div class="mod" style="max-width:540px">
+    <div class="mod-t">💰 Төлбөр бүртгэх</div>
+    <div id="pay-info" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+
+    <div style="background:var(--input);padding:10px;border-radius:8px;margin-bottom:12px">
+      <div class="row" style="justify-content:space-between;font-size:13px">
+        <span>Нэхэмжлэхийн дүн:</span>
+        <span class="bold" id="pay-total">₮0</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:13px;margin-top:4px">
+        <span>Аль хэдийн төлсөн:</span>
+        <span class="bold" id="pay-paid" style="color:var(--green)">₮0</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:14px;font-weight:900;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+        <span>Үлдэгдэл:</span>
+        <span id="pay-due" style="color:var(--orange-dark)">₮0</span>
+      </div>
+    </div>
+
+    <div class="ch">➕ Шинэ төлбөр нэмэх</div>
+    <div class="fg r2">
+      <div class="fld">
+        <label>Дүн</label>
+        <input class="inp" type="number" id="pay-amt" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="fld">
+        <label>Хэлбэр</label>
+        <select class="inp" id="pay-method">
+          <option value="бэлэн">💵 Бэлэн</option>
+          <option value="карт">💳 Карт</option>
+          <option value="QPay">📱 QPay</option>
+          <option value="дансаар">🏦 Дансаар</option>
+          <option value="зээл">📝 Зээл (авлага)</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:6px">
+      <button type="button" class="btn btn-sm" onclick="setPayAmt('full')">↗ Бүх үлдэгдэл</button>
+      <button type="button" class="btn btn-sm" onclick="setPayAmt('half')">½ Хагас</button>
+      <button type="button" class="btn btn-sm btn-p" onclick="addPayment()">+ Бүртгэх</button>
+    </div>
+
+    <div class="ch" style="margin-top:14px">📜 Бүртгэгдсэн төлбөрүүд</div>
+    <div id="pay-history" style="max-height:160px;overflow-y:auto"></div>
+
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('pay-modal')">Хаах</button>
+      <button class="btn btn-g btn-sm" onclick="finalizePayment()" id="pay-finalize-btn">✅ Хадгалах</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT FINANCE MODAL -->
+<div class="mod-bd" id="edit-modal">
+  <div class="mod">
+    <div class="mod-t">✏️ Бичлэг засах</div>
+    <div class="fg r2">
+      <div class="fld"><label>Дүн</label><input class="inp" type="number" id="ed-amt"></div>
+      <div class="fld"><label>Хэлбэр</label>
+        <select class="inp" id="ed-method">
+          <option value="бэлэн">Бэлэн</option>
+          <option value="карт">Карт</option>
+          <option value="QPay">QPay</option>
+          <option value="шилжүүлэг">Шилжүүлэг</option>
+        </select>
+      </div>
+    </div>
+    <div class="mod-actions">
+      <button class="btn btn-sm" onclick="closeModal('edit-modal')">Болих</button>
+      <button class="btn btn-p btn-sm" onclick="saveEditFin()">💾 Хадгалах</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<!-- RECEIPT / INVOICE VIEWER MODAL -->
+<div class="mod-bd" id="receipt-modal">
+  <div class="mod" style="max-width:640px;padding:0;overflow:hidden">
+    <div style="background:var(--navy);color:#fff;padding:18px 20px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--orange)">
+      <div>
+        <div style="font-size:18px;font-weight:900;letter-spacing:0.5px">🐎 МОРЬТОН АДУУНЫ ТӨВ</div>
+        <div style="font-size:11px;opacity:0.75;margin-top:2px">Адууны эмнэлгийн төв · 99999999</div>
+      </div>
+      <button class="btn btn-sm" onclick="closeModal('receipt-modal')" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25)">✕ Хаах</button>
+    </div>
+    <div id="receipt-body" style="padding:20px;overflow-y:auto;max-height:70vh"></div>
+    <div class="mod-actions" style="padding:14px 20px;border-top:1px solid var(--border);background:var(--bg)">
+      <button class="btn btn-sm" onclick="closeModal('receipt-modal')">Хаах</button>
+      <button class="btn btn-p" onclick="printReceiptNow()">🖨️ Хэвлэх / PDF</button>
+    </div>
+  </div>
+</div>
+
+<div id="print-area"></div>
+
+<script src="app.js?v=20261023"></script>
+<script src="lab.js?v=20261023"></script>
+<script src="pharmacy.js?v=20261023"></script>
+<script src="timesheet.js?v=20261023"></script>
+<script src="dailyreport.js?v=20261023"></script>
+
+<!-- PWA: service worker бүртгэх, автомат шинэчлэлт, суулгах товч -->
+<script src="pwa.js?v=20260731"></script>
+</body>
+</html>

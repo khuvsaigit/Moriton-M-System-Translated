@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// ============================================================
+//  Moriton Equine Center — Firebase Storage Security Rules
+// ------------------------------------------------------------
+//  The application uploads images strictly to TWO storage paths:
+//    exam-images/{examId}/{imageId}.jpg   — Examination images (app.js)
+//    lab-results/{labId}/{imageId}.jpg    — Laboratory test results (lab.js)
+//
+//  ⚠️ Paste this file IN ITS ENTIRETY into:
+//     Firebase Console → Build → Storage → Rules and click Publish.
+//     (Do NOT paste into Firestore Database → Rules — that will have
+//     no effect on storage images.)
+//
+//  Intentionally written simply: no helper functions or file type checks.
+//  A previous version checked contentType, which in certain edge cases
+//  inadvertently blocked valid upload requests.
+// ============================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Examination images
+    match /exam-images/{examId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Laboratory test results
+    match /lab-results/{labId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+
+    // All other paths — deny access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

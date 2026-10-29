@@ -1,0 +1,44 @@
+name: Backend quality
+
+on:
+  push:
+    paths: ["backend/**", "pyproject.toml", ".github/workflows/backend-quality.yml"]
+  pull_request:
+    paths: ["backend/**", "pyproject.toml", ".github/workflows/backend-quality.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  local-safe-checks:
+    runs-on: [self-hosted, linux, moriton-client-approved]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/dev.txt
+      - run: python -m pip install -r backend/requirements/dev.txt
+      - run: ruff check backend
+      - run: mypy backend/tools/terraform_plan_policy.py backend/services/clinical/registry/security.py
+      - run: python -m pip_audit -r backend/requirements/dev.txt
+      - run: python backend/tools/secret_scan.py
+      - run: python backend/tools/check_contracts.py
+      - name: Terraform plan policy tests
+        run: PYTHONPATH=backend python -m unittest backend.tests.test_terraform_plan_policy
+      - name: Service checks and migrations
+        env:
+          DATABASE_URL: sqlite:////tmp/moriton-ci.sqlite3
+        run: |
+          for svc in clinical integrations imaging; do
+            (cd "backend/services/$svc" && python manage.py check && python manage.py makemigrations --check --dry-run && python manage.py migrate --noinput)
+          done
+      - name: Django tests
+        env:
+          DATABASE_URL: sqlite:////tmp/moriton-ci-tests.sqlite3
+        run: |
+          (cd backend/services/clinical && PYTHONPATH=. pytest --ds=config.settings)
+          (cd backend/services/integrations && PYTHONPATH=. pytest --ds=config.settings)
+          (cd backend/services/imaging && PYTHONPATH=. pytest --ds=config.settings)

@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16
+    environment: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: local-only, POSTGRES_DB: postgres}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data, ./docker/init-databases.sql:/docker-entrypoint-initdb.d/01-init.sql:ro]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 3s, timeout: 3s, retries: 20}
+  clinical:
+    build: ./services/clinical
+    image: moriton/clinical:${MORITON_IMAGE_TAG:-local}
+    environment:
+      DATABASE_URL: postgresql://clinical:clinical@postgres:5432/clinical_db
+      DJANGO_SECRET_KEY: local-only-change-me
+      DJANGO_DEBUG: "1"
+      MORITON_LOCAL_AUTH_ENABLED: ${MORITON_LOCAL_AUTH_ENABLED:-0}
+      LOCAL_AUTH_ACTOR_ID: ${LOCAL_AUTH_ACTOR_ID:-}
+      LOCAL_AUTH_ORGANIZATION_ID: ${LOCAL_AUTH_ORGANIZATION_ID:-}
+      LOCAL_AUTH_BRANCH_ID: ${LOCAL_AUTH_BRANCH_ID:-}
+      LOCAL_AUTH_ROLE: ${LOCAL_AUTH_ROLE:-}
+      LOCAL_AUTH_PERMISSIONS: ${LOCAL_AUTH_PERMISSIONS:-}
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on: {postgres: {condition: service_healthy}}
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
+  integrations:
+    build: ./services/integrations
+    image: moriton/integrations:${MORITON_IMAGE_TAG:-local}
+    environment: {DATABASE_URL: postgresql://integrations:integrations@postgres:5432/integration_db, DJANGO_SECRET_KEY: local-only-change-me, DJANGO_DEBUG: "1", ODOO_WRITES_ENABLED: "0"}
+    ports: ["127.0.0.1:8002:8000"]
+    depends_on: {postgres: {condition: service_healthy}}
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
+  imaging:
+    build: ./services/imaging
+    image: moriton/imaging:${MORITON_IMAGE_TAG:-local}
+    environment: {DATABASE_URL: postgresql://imaging:imaging@postgres:5432/imaging_db, DJANGO_SECRET_KEY: local-only-change-me, DJANGO_DEBUG: "1"}
+    ports: ["127.0.0.1:8003:8000"]
+    depends_on: {postgres: {condition: service_healthy}}
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
+volumes:
+  pgdata:

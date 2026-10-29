@@ -1,0 +1,7 @@
+# Service assertion v1 draft
+
+This is a testable contract proposal, not an enabled cross-service authentication scheme. The issuing service signs a short-lived assertion for one target service. Claims carry issuer, subject, one audience, issue/expiry times, unique `jti`, active `kid`, actor, organization, branch, policy version and the specific permissions requested. Expiry is at most five minutes; verifiers allow no more than 30 seconds of clock skew, reject unknown `kid`/issuer/audience and never accept an unsigned token. A `jti` receipt prevents replay for the assertion lifetime.
+
+Key handling remains an explicit deployment gate: the client must approve the signing key service, authorized issuers, rotation overlap and revocation propagation. During rotation, a verifier accepts only the active key and the named retiring key for the agreed overlap; no fallback key or algorithm negotiation is allowed. The algorithm and key service should be fixed in an ADR before a cryptographic verifier is enabled. The claim validator is deliberately separate from signature verification and cannot establish authenticity by itself.
+
+`contracts/security/service-assertion.v1.schema.json` defines claim shape and `service-assertion.test-vectors.json` contains claim-validation vectors. The current code validates claims only after an external verifier reports the signature verified; there is no signing key or production trust configuration in the repository.

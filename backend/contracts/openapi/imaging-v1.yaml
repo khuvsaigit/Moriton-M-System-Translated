@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info: {title: Moriton Imaging API, version: 1.0.0}
+servers: [{url: /api/v1}]
+paths:
+  /health/live:
+    get:
+      operationId: imagingLiveness
+      responses: {'200': {description: Process is alive}}
+  /studies/{studyId}:
+    get:
+      operationId: getImagingStudy
+      parameters:
+        - {in: path, name: studyId, required: true, schema: {type: string, format: uuid}}
+      security: [{serviceSession: []}]
+      responses:
+        '200': {description: Scoped study metadata; no object bytes in this response}
+        '401': {description: Authentication required}
+        '403': {description: Organization/branch scope required}
+        '404': {description: Study not found in authorized scope}
+components:
+  securitySchemes:
+    serviceSession: {type: apiKey, in: cookie, name: sessionid}

@@ -1,0 +1,11 @@
+-r ../services/clinical/requirements.txt
+-r ../services/integrations/requirements.txt
+-r ../services/imaging/requirements.txt
+pytest>=9.0.3,<10.0
+pytest-django>=4.11,<5.0
+ruff>=0.9,<1.0
+mypy>=1.13,<2.0
+pip-audit>=2.7,<3.0
+jsonschema>=4.23,<5.0
+PyYAML>=6.0,<7.0
+openapi-spec-validator>=0.7,<0.8

@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info: {title: Moriton External Integrations API, version: 1.0.0}
+servers: [{url: /api/v1}]
+paths:
+  /health/live:
+    get:
+      operationId: integrationsLiveness
+      responses: {'200': {description: Process is alive}}
+  /call24/preview:
+    post:
+      operationId: previewCall24Csv
+      description: Validates an uploaded export and returns a non-booking preview. Tenant scope comes from authenticated request context, never from the file.
+      security: [{serviceSession: []}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '200': {description: 'Import preview with source hash, parent requests, child calls and row issues'}
+        '400': {description: Invalid or unsupported CSV}
+        '401': {description: Authentication required}
+        '403': {description: Authorized organization and branch scope required}
+components:
+  securitySchemes:
+    serviceSession: {type: apiKey, in: cookie, name: sessionid}

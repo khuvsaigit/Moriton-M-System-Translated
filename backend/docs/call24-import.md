@@ -1,0 +1,9 @@
+# Call 24 CSV adapter
+
+The supplied file is an export/report, not yet a verified live API contract. Its rows contain parent tasks (`task_id`) and child calls (`subtask_id`); one parent may have several call attempts. `services.integrations.call24.adapter.parse_csv()` maps parent requests and call records separately, joins child calls by task ID, preserves Mongolian category labels/status values, deduplicates repeated task/call identifiers in the preview, and emits a source-file SHA-256 plus row validation issues.
+
+Observed sample columns include `Дугаар`, `Харилцагч`, `Төлөв`, `Хариуцагч`, `Ext`, `Email`, `Баг`, `Inbox`, `Ангилал 1..3`, `Огноо`, `Resolve тэмдэглэл`, `subtask_id`, `Дуудлага төрөл`, `Дуудлага төлөв`, `Хариулсан хүн`, `Хүлээсэн (сек)`, `Яриа (сек)`, and `Дуудлага огноо`. We do not infer a horse identity, confirmed booking, visit, clinical priority, or screening result from a call. Contact mapping from `Холбогдогч талын нэр, утас` and `Ext` is provisional until the provider confirms semantics; raw imported data must retain the original payload for traceability.
+
+The CLI is preview-only. Production intake needs approved authenticated provider access, durable raw receipt + import-batch/row records, stable source event/revision semantics, tenant/branch routing, replay/correction policy and contract tests. A CSV file itself has no trustworthy organization/branch identity; caller/config supplies that after authorization, never a CSV tenant field.
+
+The CSV's date/time fields are preserved as timezone-naive local wall time because the export does not carry an offset and the client's source timezone has not been confirmed. Do not publish those values as UTC or use them as an authoritative event timestamp until the Call 24 timezone and daylight-saving behavior are confirmed. Mongolian yes/no complaint flags are parsed only for recognized tokens; unknown values remain `null` and are reported for review.

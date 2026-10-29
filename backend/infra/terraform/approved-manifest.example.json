@@ -1,0 +1,8 @@
+{
+  "approval_status": "PENDING",
+  "approved_by": null,
+  "approved_at": null,
+  "allowed_resource_types": [],
+  "max_resource_changes": {},
+  "note": "Replace only after client signs the exact AWS resource types and ceilings."
+}

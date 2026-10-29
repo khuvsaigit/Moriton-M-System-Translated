@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moriton.example/contracts/security/service-assertion.v1.schema.json",
+  "title": "Moriton service assertion claims v1 (signed JWT envelope claims)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["iss", "sub", "aud", "iat", "exp", "jti", "kid", "organization_id", "branch_id", "actor_id", "policy_version", "permissions"],
+  "properties": {
+    "iss": {"type": "string", "minLength": 1},
+    "sub": {"type": "string", "minLength": 1},
+    "aud": {"type": "string", "minLength": 1},
+    "iat": {"type": "integer", "minimum": 0},
+    "exp": {"type": "integer", "minimum": 1},
+    "jti": {"type": "string", "format": "uuid"},
+    "kid": {"type": "string", "minLength": 1},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "branch_id": {"type": "string", "format": "uuid"},
+    "actor_id": {"type": "string", "format": "uuid"},
+    "policy_version": {"type": "integer", "minimum": 1},
+    "permissions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+  }
+}

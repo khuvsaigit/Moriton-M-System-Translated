@@ -1,0 +1,6 @@
+# Python backend local environment and generated files
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/

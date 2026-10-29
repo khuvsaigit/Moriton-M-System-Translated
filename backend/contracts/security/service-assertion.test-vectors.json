@@ -1,0 +1,24 @@
+{
+  "contract": "service-assertion.v1",
+  "verification_note": "Claim-only vectors. A cryptographic verifier must verify the JWS signature and key id before these claims are trusted.",
+  "valid_claims": {
+    "iss": "clinical",
+    "sub": "clinical-service",
+    "aud": "integrations",
+    "iat": 1793232000,
+    "exp": 1793232120,
+    "jti": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "kid": "clinical-key-2026-01",
+    "organization_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "branch_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "actor_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    "policy_version": 4,
+    "permissions": ["operation.enqueue"]
+  },
+  "reject_cases": [
+    {"change": {"aud": "imaging"}, "reason": "audience mismatch"},
+    {"change": {"exp": 1793232600}, "reason": "lifetime exceeds five minutes"},
+    {"remove": "kid", "reason": "key rotation key id is required"},
+    {"remove": "jti", "reason": "replay identity is required"}
+  ]
+}

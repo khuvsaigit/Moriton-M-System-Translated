@@ -75,6 +75,22 @@ class Call24ImportRow(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["batch", "row_number"], name="call24_batch_row_unique")]
 
+class Call24RequestProjection(models.Model):
+    """Stable source-request identity and version used to publish idempotent events."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    source_request_id = models.CharField(max_length=160)
+    source_revision = models.CharField(max_length=64)
+    aggregate_id = models.UUIDField()
+    aggregate_version = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=["organization_id", "branch_id", "source_request_id"],
+            name="call24_projection_scope_source_unique",
+        )]
+
 class IntegrationAuditEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization_id = models.UUIDField(db_index=True)

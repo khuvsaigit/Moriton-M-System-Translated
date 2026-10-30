@@ -167,6 +167,12 @@ def parse_csv(source: str | Path | TextIO) -> ImportPreview:
             if parent:
                 if call.source_call_id not in call_ids: parent.calls.append(call); call_ids.add(call.source_call_id)
             else: still_unmatched.append(call)
+        for request in requests.values():
+            normalized = asdict(request)
+            normalized.pop("source_revision", None)
+            request.source_revision = hashlib.sha256(
+                json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
         return ImportPreview(source_hash, list(requests.values()), still_unmatched, issues, row_count, source_rows)
     finally:
         if close: stream.close()

@@ -17,12 +17,180 @@ paths:
         - {in: query, name: q, schema: {type: string, maxLength: 120}}
         - {in: query, name: cursor, schema: {type: string}}
         - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
-      responses: {'200': {description: Scoped horse results}}
+      responses:
+        '200':
+          description: Scoped horse results; matching on phone is never treated as identity.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HorsePage'}
     post:
       operationId: createHorse
       security: [{sessionAuth: []}]
       parameters: [{in: header, name: Idempotency-Key, required: true, schema: {type: string, format: uuid}}]
-      responses: {'201': {description: Horse created}, '400': {description: Validation error}, '409': {description: Duplicate candidate}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HorseCreate'}
+      responses:
+        '201': {description: Horse created}
+        '400': {description: Validation error}
+        '409': {description: Duplicate candidate requiring human review}
+  /reception/tasks:
+    get:
+      operationId: listReceptionTasks
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: Branch scoped reception tasks}}
+    post:
+      operationId: createReceptionTask
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReceptionCreate'}
+      responses: {'201': {description: Reception task created}, '400': {description: Validation error}}
+  /reception/tasks/{task_id}/actions:
+    post:
+      operationId: transitionReceptionTask
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: task_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReceptionAction'}
+      responses: {'200': {description: Updated reception task}, '403': {description: Permission denied}, '404': {description: Task not found}, '409': {description: Version or state conflict}}
+  /visits:
+    get:
+      operationId: listVisits
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: Branch scoped visits}}
+    post:
+      operationId: registerVisit
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VisitCreate'}
+      responses: {'201': {description: Visit registered with branch sequence slip number}, '400': {description: Validation error}}
+  /visits/{visit_id}/arrival:
+    post:
+      operationId: recordVisitArrival
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: visit_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VersionCheck'}
+      responses: {'200': {description: Arrival recorded}, '404': {description: Visit not found}, '409': {description: Version or state conflict}}
+  /visits/{visit_id}/assignments:
+    post:
+      operationId: assignVisit
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: visit_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VisitAssignment'}
+      responses: {'201': {description: Assignment recorded in immutable history}, '404': {description: Visit not found}}
+  /visits/{visit_id}/draft-notes:
+    post:
+      operationId: createDraftClinicalNote
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: visit_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DraftNoteCreate'}
+      responses: {'201': {description: Draft note created; signing is not available in this release}, '400': {description: Validation error}, '404': {description: Visit not found}}
+  /clinical-notes/{note_id}/revisions:
+    post:
+      operationId: reviseDraftClinicalNote
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: note_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DraftNoteRevision'}
+      responses: {'201': {description: New immutable draft revision}, '404': {description: Note not found}, '409': {description: Version conflict}}
 components:
+  schemas:
+    HorseCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, maxLength: 160}
+        breed: {type: string, maxLength: 120}
+        tamga: {type: string, maxLength: 120}
+        birth_year: {type: [integer, 'null']}
+        identifiers:
+          type: array
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type: {type: string}
+              issuer: {type: string}
+              value: {type: string}
+    HorsePage:
+      type: object
+      properties:
+        items: {type: array, items: {type: object}}
+        next: {type: [string, 'null']}
+    ReceptionCreate:
+      type: object
+      properties:
+        customer_name: {type: string}
+        phone: {type: string}
+        summary: {type: string}
+    ReceptionAction:
+      type: object
+      required: [action, expected_version]
+      properties:
+        action: {type: string, enum: [assign, link, resolve]}
+        expected_version: {type: integer, minimum: 1}
+        assigned_to: {type: string, format: uuid}
+        horse_id: {type: string, format: uuid}
+        reason: {type: string}
+    VisitCreate:
+      type: object
+      required: [horse_id]
+      properties:
+        horse_id: {type: string, format: uuid}
+        reception_task_id: {type: [string, 'null'], format: uuid}
+    VersionCheck:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, minimum: 1}
+    VisitAssignment:
+      type: object
+      required: [practitioner_id]
+      properties:
+        practitioner_id: {type: string, format: uuid}
+        reason: {type: string}
+    DraftNoteCreate:
+      type: object
+      required: [body]
+      properties:
+        body: {type: string}
+        note_type: {type: string, default: general}
+    DraftNoteRevision:
+      type: object
+      required: [body, expected_version]
+      properties:
+        body: {type: string}
+        expected_version: {type: integer, minimum: 1}
   securitySchemes:
     sessionAuth: {type: apiKey, in: cookie, name: sessionid}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moriton.example/contracts/odoo.operation.result.v1.schema.json",
+  "title": "Mock or approved Odoo operation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "message_type", "producer", "destination", "organization_id", "branch_id", "aggregate_id", "aggregate_version", "operation_id", "correlation_id", "causation_id", "occurred_at", "actor_reference", "policy_version", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "message_id": {"type": "string", "format": "uuid"},
+    "message_type": {"const": "odoo.operation.result.v1"},
+    "producer": {"const": "odoo-mock"},
+    "destination": {"const": "integrations"},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "branch_id": {"type": "string", "format": "uuid"},
+    "aggregate_id": {"type": "string", "format": "uuid"},
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "operation_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"type": ["string", "null"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "actor_reference": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation_id", "ledger_operation_id", "lease_token", "result_state", "remote_model", "remote_id", "evidence"],
+      "properties": {
+        "operation_id": {"type": "string", "format": "uuid"},
+        "ledger_operation_id": {"type": "string", "format": "uuid"},
+        "lease_token": {"type": "string", "format": "uuid"},
+        "result_state": {"enum": ["CONFIRMED", "REJECTED", "UNKNOWN"]},
+        "remote_model": {"type": "string"},
+        "remote_id": {"type": "string"},
+        "evidence": {"type": "object"}
+      }
+    }
+  }
+}

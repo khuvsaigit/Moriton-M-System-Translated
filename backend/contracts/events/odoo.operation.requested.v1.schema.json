@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moriton.example/contracts/odoo.operation.requested.v1.schema.json",
+  "title": "Mock or approved Odoo operation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "message_type", "producer", "destination", "organization_id", "branch_id", "aggregate_id", "aggregate_version", "operation_id", "correlation_id", "causation_id", "occurred_at", "actor_reference", "policy_version", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "message_id": {"type": "string", "format": "uuid"},
+    "message_type": {"const": "odoo.operation.requested.v1"},
+    "producer": {"const": "integrations"},
+    "destination": {"const": "odoo-mock"},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "branch_id": {"type": "string", "format": "uuid"},
+    "aggregate_id": {"type": "string", "format": "uuid"},
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "operation_id": {"type": "string", "format": "uuid"},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"type": ["string", "null"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "actor_reference": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ledger_operation_id", "lease_token", "action", "business_key", "payload_hash", "expected_revision"],
+      "properties": {
+        "ledger_operation_id": {"type": "string", "format": "uuid"},
+        "lease_token": {"type": "string", "format": "uuid"},
+        "action": {"type": "string"},
+        "business_key": {"type": "string"},
+        "payload_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "expected_revision": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

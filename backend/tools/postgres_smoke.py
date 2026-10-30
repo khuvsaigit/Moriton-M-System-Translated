@@ -17,14 +17,21 @@ DATABASES = {"clinical": "clinical_db", "integrations": "integration_db", "imagi
 SCOPED_TABLES = {
     "clinical": ["registry_horse", "registry_horseidentifier", "registry_contact", "registry_horsepartyrole",
                  "registry_receptiontask", "registry_auditevent", "registry_outboxevent", "registry_inboxreceipt",
-                 "registry_servicemembership", "registry_registereddevice", "registry_fieldaccessgrant"],
+                 "registry_servicemembership", "registry_registereddevice", "registry_fieldaccessgrant",
+                 "registry_branchvisitsequence", "registry_clinicalnote", "registry_clinicalnoterevision",
+                 "registry_receptiontaskhistory", "registry_visit", "registry_visitassignment"],
     "integrations": ["ledger_operationstream", "ledger_externaloperation", "ledger_call24importbatch",
                      "ledger_call24importrow", "ledger_integrationauditevent", "ledger_integrationoutboxevent",
-                     "ledger_integrationinboxreceipt"],
+                     "ledger_integrationinboxreceipt", "ledger_call24requestprojection"],
     "imaging": ["imaging_imagingstudy", "imaging_imagingseries", "imaging_imaginginstance",
                 "imaging_imagingauditevent", "imaging_imagingoutboxevent", "imaging_imaginginboxreceipt"],
 }
 AUDIT_TABLES = {"clinical": "registry_auditevent", "integrations": "ledger_integrationauditevent", "imaging": "imaging_imagingauditevent"}
+APPEND_ONLY_TABLES = {
+    "clinical": ["registry_clinicalnoterevision", "registry_receptiontaskhistory", "registry_visitassignment"],
+    "integrations": [],
+    "imaging": [],
+}
 ROLE_LIMITS = {"clinical": 18, "integrations": 12, "imaging": 10}
 
 
@@ -58,6 +65,9 @@ def check_rls(service, dsn):
             audit_table = AUDIT_TABLES[service]
             cursor.execute("SELECT tgname FROM pg_trigger WHERE tgrelid = %s::regclass AND NOT tgisinternal", [audit_table])
             assert "moriton_audit_append_only" in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {audit_table}"
+            for table in APPEND_ONLY_TABLES[service]:
+                cursor.execute("SELECT tgname FROM pg_trigger WHERE tgrelid = %s::regclass AND NOT tgisinternal", [table])
+                assert f"{table}_append_only" in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {table}"
 
     organization_id, branch_id, actor_id, horse_id = (uuid4() for _ in range(4))
     other_org, other_branch = uuid4(), uuid4()

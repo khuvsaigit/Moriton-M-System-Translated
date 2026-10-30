@@ -15,11 +15,12 @@
     "occurred_at": {"type": "string", "format": "date-time"}, "actor_reference": {"type": "string", "minLength": 1},
     "policy_version": {"type": "string", "minLength": 1}, "payload": {"$ref": "#/$defs/payload"}
   },
-  "$defs": {"payload": {"type": "object", "additionalProperties": false, "required": ["source_request_id", "status", "received_at", "category_labels", "customer_name", "phone", "summary", "source_revision"], "properties": {
+  "$defs": {"payload": {"type": "object", "additionalProperties": false, "required": ["source_request_id", "status", "received_at", "source_time_local", "category_labels", "customer_name", "phone", "summary", "source_revision", "source_call_ids", "complaint", "matching_status"], "properties": {
     "source_request_id": {"type": "string"}, "source_call_ids": {"type": "array", "items": {"type": "string"}},
     "status": {"type": "string"}, "received_at": {"type": ["string", "null"], "format": "date-time"},
+    "source_time_local": {"type": ["string", "null"], "description": "Original local source timestamp; not interpreted as UTC until the source timezone is confirmed."},
     "category_labels": {"type": "array", "items": {"type": "string"}}, "customer_name": {"type": ["string", "null"]},
     "phone": {"type": ["string", "null"]}, "summary": {"type": ["string", "null"]},
-    "source_revision": {"type": "string"}, "matching_status": {"const": "unconfirmed"}
+    "source_revision": {"type": "string"}, "complaint": {"type": ["boolean", "null"]}, "matching_status": {"const": "unconfirmed"}
   }}}
 }

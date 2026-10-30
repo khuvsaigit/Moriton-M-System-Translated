@@ -44,18 +44,117 @@ class HorsePartyRole(ScopedRecord):
     role = models.CharField(max_length=24, choices=[("owner", "Owner"), ("representative", "Representative"), ("payer", "Payer")])
     valid_from = models.DateTimeField()
     valid_to = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        constraints = [models.CheckConstraint(
+            condition=models.Q(valid_to__isnull=True) | models.Q(valid_to__gt=models.F("valid_from")),
+            name="horse_party_role_valid_window",
+        )]
 
 class ReceptionTask(ScopedRecord):
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        ASSIGNED = "assigned", "Assigned"
+        LINKED = "linked", "Linked"
+        RESOLVED = "resolved", "Resolved"
+
     source = models.CharField(max_length=24, default="manual")
     source_request_id = models.CharField(max_length=120, blank=True)
-    status = models.CharField(max_length=24, default="new")
+    source_revision = models.CharField(max_length=64, blank=True)
+    source_time_local = models.CharField(max_length=80, blank=True)
+    source_call_ids = models.JSONField(default=list, blank=True)
+    category_labels = models.JSONField(default=list, blank=True)
+    complaint = models.BooleanField(null=True, blank=True)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.NEW)
     customer_name = models.CharField(max_length=200, blank=True)
     phone = models.CharField(max_length=32, blank=True)
     summary = models.TextField(blank=True)
     identity_status = models.CharField(max_length=24, default="unconfirmed")
     requested_at = models.DateTimeField(null=True, blank=True)
+    assigned_to = models.UUIDField(null=True, blank=True)
+    linked_horse = models.ForeignKey(Horse, null=True, blank=True, on_delete=models.PROTECT, related_name="reception_tasks")
+    visit = models.ForeignKey("Visit", null=True, blank=True, on_delete=models.PROTECT, related_name="reception_tasks")
+    resolved_at = models.DateTimeField(null=True, blank=True)
     class Meta:
         constraints = [models.UniqueConstraint(fields=["organization_id", "branch_id", "source", "source_request_id"], condition=~models.Q(source_request_id=""), name="reception_source_request_unique")]
+
+
+class ReceptionTaskHistory(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    task = models.ForeignKey(ReceptionTask, on_delete=models.PROTECT, related_name="history")
+    actor_id = models.UUIDField(null=True, blank=True)
+    action = models.CharField(max_length=32)
+    from_status = models.CharField(max_length=24, blank=True)
+    to_status = models.CharField(max_length=24, blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+
+
+class BranchVisitSequence(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField()
+    branch_id = models.UUIDField()
+    next_number = models.PositiveBigIntegerField(default=1)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization_id", "branch_id"], name="branch_visit_sequence_scope_unique")]
+
+
+class Visit(ScopedRecord):
+    class Status(models.TextChoices):
+        REGISTERED = "REGISTERED", "Registered"
+        ARRIVED = "ARRIVED", "Arrived"
+        IN_PROGRESS = "IN_PROGRESS", "In progress"
+        CLOSED = "CLOSED", "Closed"
+
+    horse = models.ForeignKey(Horse, on_delete=models.PROTECT, related_name="visits")
+    slip_number = models.CharField(max_length=32)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.REGISTERED)
+    arrived_at = models.DateTimeField(null=True, blank=True)
+    arrival_recorded_by = models.UUIDField(null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization_id", "branch_id", "slip_number"], name="visit_slip_number_scope_unique")]
+        indexes = [models.Index(fields=["organization_id", "branch_id", "arrived_at"])]
+
+
+class VisitAssignment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name="assignments")
+    practitioner_id = models.UUIDField()
+    assigned_by = models.UUIDField()
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    reason = models.CharField(max_length=240, blank=True)
+
+
+class ClinicalNote(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name="notes")
+    note_type = models.CharField(max_length=32, default="general")
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    version = models.PositiveIntegerField(default=1)
+    created_by = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class ClinicalNoteRevision(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    note = models.ForeignKey(ClinicalNote, on_delete=models.PROTECT, related_name="revisions")
+    revision = models.PositiveIntegerField()
+    body = models.TextField()
+    author_id = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["note", "revision"], name="clinical_note_revision_unique")]
 
 class AuditEvent(models.Model):
     """Service-owned append-only evidence. Application code never updates/deletes rows."""

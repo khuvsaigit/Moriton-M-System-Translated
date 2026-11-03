@@ -265,3 +265,106 @@ class FieldAccessGrant(models.Model):
     created_by = models.UUIDField()
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(expires_at__gt=models.F("valid_from")), name="field_grant_positive_window")]
+
+
+class Practitioner(ScopedRecord):
+    display_name = models.CharField(max_length=200)
+    active = models.BooleanField(default=True)
+
+
+class PractitionerQualification(ScopedRecord):
+    created_by = models.UUIDField(null=True, blank=True)
+    practitioner = models.ForeignKey(Practitioner, on_delete=models.PROTECT, related_name="qualifications")
+    code = models.CharField(max_length=80)
+    valid_from = models.DateTimeField()
+    valid_until = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        constraints = [models.CheckConstraint(
+            condition=models.Q(valid_until__isnull=True) | models.Q(valid_until__gt=models.F("valid_from")),
+            name="qualification_valid_window",
+        )]
+
+
+class PractitionerShift(ScopedRecord):
+    created_by = models.UUIDField(null=True, blank=True)
+    practitioner = models.ForeignKey(Practitioner, on_delete=models.PROTECT, related_name="shifts")
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=[("SCHEDULED", "Scheduled"), ("CANCELLED", "Cancelled")], default="SCHEDULED")
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(ends_at__gt=models.F("starts_at")), name="practitioner_shift_positive_window")]
+        indexes = [models.Index(fields=["organization_id", "branch_id", "starts_at", "ends_at"])]
+
+
+class ScheduleResource(ScopedRecord):
+    name = models.CharField(max_length=160)
+    resource_type = models.CharField(max_length=40)
+    active = models.BooleanField(default=True)
+
+
+class Appointment(ScopedRecord):
+    class Status(models.TextChoices):
+        REQUESTED = "REQUESTED", "Requested"
+        CONFIRMED = "CONFIRMED", "Confirmed"
+        CANCELLED = "CANCELLED", "Cancelled"
+        COMPLETED = "COMPLETED", "Completed"
+
+    horse = models.ForeignKey(Horse, on_delete=models.PROTECT, related_name="appointments")
+    visit = models.ForeignKey(Visit, null=True, blank=True, on_delete=models.PROTECT, related_name="appointments")
+    practitioner = models.ForeignKey(Practitioner, null=True, blank=True, on_delete=models.PROTECT, related_name="appointments")
+    resource = models.ForeignKey(ScheduleResource, null=True, blank=True, on_delete=models.PROTECT, related_name="appointments")
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.REQUESTED)
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(ends_at__gt=models.F("starts_at")), name="appointment_positive_window")]
+        indexes = [models.Index(fields=["organization_id", "branch_id", "starts_at", "status"])]
+
+
+class ScreeningForm(ScopedRecord):
+    name = models.CharField(max_length=160)
+    active = models.BooleanField(default=True)
+
+
+class ScreeningFormVersion(ScopedRecord):
+    created_by = models.UUIDField(null=True, blank=True)
+    form = models.ForeignKey(ScreeningForm, on_delete=models.PROTECT, related_name="versions")
+    version = models.PositiveIntegerField()
+    schema = models.JSONField(default=dict)
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.UUIDField(null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["form", "version"], name="screening_form_version_unique")]
+
+
+class ScreeningAnswer(ScopedRecord):
+    created_by = models.UUIDField(null=True, blank=True)
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        SUBMITTED = "SUBMITTED", "Submitted"
+
+    form_version = models.ForeignKey(ScreeningFormVersion, on_delete=models.PROTECT, related_name="answers")
+    visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name="screening_answers")
+    revision = models.PositiveIntegerField(default=1)
+    answers = models.JSONField(default=dict)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    submitted_by = models.UUIDField(null=True, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["visit", "form_version", "revision"], name="screening_answer_revision_unique")]
+
+
+class ScreeningReview(ScopedRecord):
+    created_by = models.UUIDField(null=True, blank=True)
+    class Decision(models.TextChoices):
+        PENDING = "PENDING", "Pending review"
+        CLEARED = "CLEARED", "Cleared"
+        NOT_CLEARED = "NOT_CLEARED", "Not cleared"
+        FOLLOW_UP = "FOLLOW_UP", "Follow-up required"
+
+    answer = models.ForeignKey(ScreeningAnswer, on_delete=models.PROTECT, related_name="reviews")
+    decision = models.CharField(max_length=16, choices=Decision.choices, default=Decision.PENDING)
+    reviewer_id = models.UUIDField(null=True, blank=True)
+    policy_version = models.CharField(max_length=64, blank=True)
+    rationale = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)

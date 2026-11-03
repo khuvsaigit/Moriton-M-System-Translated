@@ -8,6 +8,11 @@ from django.utils import timezone
 from .models import ExternalOperation
 from .sequence import accept_operation
 from .worker import LostLease, claim_next, complete_claim, expire_ambiguous_claims
+from .reconciliation import (
+    ReconciliationConflict,
+    begin_reconciliation,
+    finish_reconciliation,
+)
 
 
 class OperationWorkerTests(TestCase):
@@ -50,6 +55,43 @@ class OperationWorkerTests(TestCase):
                            result_state=ExternalOperation.State.CONFIRMED, now=now + timedelta(seconds=3))
         self.assertIsNone(claim_next(organization_id=self.organization_id,
                                      branch_id=self.branch_id, worker_id="worker-c"))
+
+    def test_unknown_operation_requires_reconciliation_and_confirmed_result_has_evidence(self):
+        operation = self.add_operation("reserve-reconcile")
+        claim = claim_next(organization_id=self.organization_id, branch_id=self.branch_id,
+                           worker_id="worker-reconcile")
+        complete_claim(operation_id=claim.operation_id, lease_token=claim.lease_token,
+                       organization_id=self.organization_id, branch_id=self.branch_id,
+                       result_state=ExternalOperation.State.UNKNOWN)
+        operation.refresh_from_db()
+        self.assertEqual(operation.state, ExternalOperation.State.UNKNOWN)
+        self.assertIsNone(claim_next(organization_id=self.organization_id,
+                                     branch_id=self.branch_id, worker_id="must-not-replay"))
+
+        reconciling = begin_reconciliation(
+            operation_id=operation.id, organization_id=self.organization_id,
+            branch_id=self.branch_id, actor_id=uuid4(), expected_version=operation.version,
+        )
+        self.assertEqual(reconciling.state, ExternalOperation.State.RECONCILING)
+        with self.assertRaisesRegex(ValueError, "supporting evidence"):
+            finish_reconciliation(
+                operation_id=operation.id, organization_id=self.organization_id,
+                branch_id=self.branch_id, actor_id=uuid4(), expected_version=reconciling.version,
+                result_state=ExternalOperation.State.CONFIRMED, reason="looked successful",
+            )
+        resolved = finish_reconciliation(
+            operation_id=operation.id, organization_id=self.organization_id,
+            branch_id=self.branch_id, actor_id=uuid4(), expected_version=reconciling.version,
+            result_state=ExternalOperation.State.CONFIRMED, reason="verified by remote lookup",
+            remote_model="stock.picking", remote_id="MOCK-100", evidence={"verified": True},
+        )
+        self.assertEqual(resolved.state, ExternalOperation.State.CONFIRMED)
+        self.assertEqual(resolved.remote_id, "MOCK-100")
+        with self.assertRaises(ReconciliationConflict):
+            begin_reconciliation(
+                operation_id=operation.id, organization_id=self.organization_id,
+                branch_id=self.branch_id, actor_id=uuid4(), expected_version=resolved.version,
+            )
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from ledger.sequence import accept_operation
 from ledger.worker import claim_next
 
 from .events import MockOdooPort, MockOutcome, apply_mock_result, build_operation_request
+from .simulator import MockOdooRemoteStore
 
 
 class MockOdooEventTests(TestCase):
@@ -54,3 +55,22 @@ class MockOdooEventTests(TestCase):
         self.assertEqual(operation.remote_model, "stock.picking")
         self.assertEqual(operation.remote_id, "MOCK-PICK-1")
         self.assertTrue(operation.remote_evidence["synthetic"])
+
+    def test_remote_simulator_deduplicates_concurrent_writes_and_recovers_lost_response(self):
+        store = MockOdooRemoteStore()
+        with self.assertRaisesRegex(TimeoutError, "after remote commit"):
+            store.execute(operation_key="issue-physical-001", action="dispense",
+                          lose_response_after_commit=True)
+        recovered = store.find_by_operation_key("issue-physical-001")
+        self.assertIsNotNone(recovered)
+        retries = store.execute_concurrent(
+            operation_key="issue-physical-001", action="dispense", copies=12,
+        )
+        self.assertEqual(store.write_count, 1)
+        self.assertEqual({row["remote_id"] for row in retries}, {recovered["remote_id"]})
+
+    def test_remote_simulator_rejects_business_key_reuse_with_different_action(self):
+        store = MockOdooRemoteStore()
+        store.execute(operation_key="business-key-001", action="reserve")
+        with self.assertRaisesRegex(ValueError, "different action"):
+            store.execute(operation_key="business-key-001", action="dispense")

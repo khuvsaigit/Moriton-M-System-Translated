@@ -19,7 +19,10 @@ SCOPED_TABLES = {
                  "registry_receptiontask", "registry_auditevent", "registry_outboxevent", "registry_inboxreceipt",
                  "registry_servicemembership", "registry_registereddevice", "registry_fieldaccessgrant",
                  "registry_branchvisitsequence", "registry_clinicalnote", "registry_clinicalnoterevision",
-                 "registry_receptiontaskhistory", "registry_visit", "registry_visitassignment"],
+                 "registry_receptiontaskhistory", "registry_visit", "registry_visitassignment",
+                 "registry_practitioner", "registry_practitionerqualification", "registry_practitionershift",
+                 "registry_scheduleresource", "registry_appointment", "registry_screeningform",
+                 "registry_screeningformversion", "registry_screeninganswer", "registry_screeningreview"],
     "integrations": ["ledger_operationstream", "ledger_externaloperation", "ledger_call24importbatch",
                      "ledger_call24importrow", "ledger_integrationauditevent", "ledger_integrationoutboxevent",
                      "ledger_integrationinboxreceipt", "ledger_call24requestprojection"],
@@ -28,7 +31,8 @@ SCOPED_TABLES = {
 }
 AUDIT_TABLES = {"clinical": "registry_auditevent", "integrations": "ledger_integrationauditevent", "imaging": "imaging_imagingauditevent"}
 APPEND_ONLY_TABLES = {
-    "clinical": ["registry_clinicalnoterevision", "registry_receptiontaskhistory", "registry_visitassignment"],
+    "clinical": ["registry_clinicalnoterevision", "registry_receptiontaskhistory", "registry_visitassignment",
+                 "registry_screeningformversion", "registry_screeninganswer"],
     "integrations": [],
     "imaging": [],
 }
@@ -67,7 +71,9 @@ def check_rls(service, dsn):
             assert "moriton_audit_append_only" in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {audit_table}"
             for table in APPEND_ONLY_TABLES[service]:
                 cursor.execute("SELECT tgname FROM pg_trigger WHERE tgrelid = %s::regclass AND NOT tgisinternal", [table])
-                assert f"{table}_append_only" in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {table}"
+                trigger_name = (f"{table}_published_immutable" if table.startswith("registry_screening")
+                                else f"{table}_append_only")
+                assert trigger_name in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {table}"
 
     organization_id, branch_id, actor_id, horse_id = (uuid4() for _ in range(4))
     other_org, other_branch = uuid4(), uuid4()
@@ -93,6 +99,42 @@ def check_rls(service, dsn):
             if service == "clinical":
                 cursor.execute("INSERT INTO registry_horse (id, organization_id, branch_id, created_at, updated_at, created_by, version, name, breed, tamga, birth_year, age_precision, origin, merged_into_id) VALUES (%s,%s,%s,NOW(),NOW(),%s,1,'RLS smoke test','','',NULL,'unknown','',NULL)",
                                [horse_id, organization_id, branch_id, actor_id])
+                form_id, form_version_id, visit_id, answer_id = (uuid4() for _ in range(4))
+                cursor.execute(
+                    "INSERT INTO registry_screeningform "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, name, active) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,'RLS smoke form',TRUE)",
+                    [form_id, organization_id, branch_id, actor_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_screeningformversion "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, form_id, schema, published_at, published_by) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,%s,'{}'::jsonb,NOW(),%s)",
+                    [form_version_id, organization_id, branch_id, actor_id, form_id, actor_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_visit "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, horse_id, slip_number, status, arrived_at, arrival_recorded_by) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,%s,%s,'REGISTERED',NULL,NULL)",
+                    [visit_id, organization_id, branch_id, actor_id, horse_id, f"RLS-{visit_id.hex[:20]}"],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_screeninganswer "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, form_version_id, visit_id, revision, answers, status, submitted_by, submitted_at) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,%s,%s,1,'{}'::jsonb,'SUBMITTED',%s,NOW())",
+                    [answer_id, organization_id, branch_id, actor_id, form_version_id, visit_id, actor_id],
+                )
+                for table, record_id, column in (
+                    ("registry_screeningformversion", form_version_id, "schema"),
+                    ("registry_screeninganswer", answer_id, "answers"),
+                ):
+                    rejected = False
+                    try:
+                        with conn.transaction():
+                            cursor.execute(f"UPDATE {table} SET {column}='{{\"tampered\":true}}'::jsonb WHERE id=%s", [record_id])
+                    except psycopg.Error:
+                        rejected = True
+                    assert rejected, f"immutability trigger allowed UPDATE on {table}"
                 table, record_id = "registry_horse", horse_id
             elif service == "integrations":
                 cursor.execute("INSERT INTO ledger_operationstream (id, organization_id, branch_id, aggregate_kind, aggregate_id, next_sequence) VALUES (%s,%s,%s,'smoke',%s,1)",

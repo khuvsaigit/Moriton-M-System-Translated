@@ -368,3 +368,100 @@ class ScreeningReview(ScopedRecord):
     policy_version = models.CharField(max_length=64, blank=True)
     rationale = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+
+
+class Prescription(ScopedRecord):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        VERIFIED = "VERIFIED", "Verified"
+        CANCELLED = "CANCELLED", "Cancelled"
+        COMPLETED = "COMPLETED", "Completed"
+
+    visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name="prescriptions")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    verified_by = models.UUIDField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+
+class PrescriptionLine(ScopedRecord):
+    prescription = models.ForeignKey(Prescription, on_delete=models.PROTECT, related_name="lines")
+    medication_name = models.CharField(max_length=200)
+    prescribed_quantity = models.DecimalField(max_digits=14, decimal_places=4)
+    unit = models.CharField(max_length=32)
+    instructions = models.TextField(blank=True)
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(prescribed_quantity__gt=0), name="prescription_line_quantity_positive")]
+
+
+class PhysicalMedicationIssue(ScopedRecord):
+    """Immutable fact that a physical quantity was handed out; ERP posting is separate."""
+    prescription_line = models.ForeignKey(PrescriptionLine, on_delete=models.PROTECT, related_name="physical_issues")
+    quantity = models.DecimalField(max_digits=14, decimal_places=4)
+    unit = models.CharField(max_length=32)
+    issued_at = models.DateTimeField()
+
+
+class MedicationAdministration(ScopedRecord):
+    """Clinical administration record. Creating one never creates a stock movement."""
+    physical_issue = models.ForeignKey(PhysicalMedicationIssue, on_delete=models.PROTECT, related_name="administrations")
+    dose_quantity = models.DecimalField(max_digits=14, decimal_places=4)
+    unit = models.CharField(max_length=32)
+    administered_at = models.DateTimeField()
+    performer_id = models.UUIDField()
+    outcome = models.CharField(max_length=24, default="GIVEN")
+    note = models.TextField(blank=True)
+
+
+class MedicationCorrectionIntent(ScopedRecord):
+    class Kind(models.TextChoices):
+        CANCEL = "CANCEL", "Cancel prescription"
+        RELEASE = "RELEASE", "Release reservation"
+        SUBSTITUTE = "SUBSTITUTE", "Substitute medication"
+        RETURN = "RETURN", "Return medication"
+        WASTE = "WASTE", "Record waste"
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    prescription = models.ForeignKey(Prescription, on_delete=models.PROTECT, related_name="correction_intents")
+    original_issue = models.ForeignKey(PhysicalMedicationIssue, null=True, blank=True, on_delete=models.PROTECT, related_name="correction_intents")
+    quantity = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    unit = models.CharField(max_length=32, blank=True)
+    reason = models.TextField()
+    state = models.CharField(max_length=24, default="PENDING_POLICY")
+
+
+class ChargeSource(ScopedRecord):
+    """Stable local charge provenance; no invoice is created until billing policy is approved."""
+    source_event_id = models.UUIDField()
+    source_version = models.PositiveIntegerField(default=1)
+    charge_type = models.CharField(max_length=40)
+    quantity = models.DecimalField(max_digits=14, decimal_places=4)
+    unit_price = models.DecimalField(max_digits=14, decimal_places=4)
+    currency = models.CharField(max_length=3)
+    invoice_line_ref = models.CharField(max_length=160, blank=True)
+    billing_state = models.CharField(max_length=24, default="POLICY_PENDING")
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization_id", "branch_id", "source_event_id", "source_version", "charge_type"], name="charge_source_identity_unique")]
+
+
+class FinancialWorkflowState(ScopedRecord):
+    class DepositState(models.TextChoices):
+        UNVERIFIED = "UNVERIFIED", "Unverified"
+        PENDING = "PENDING", "Pending"
+        CONFIRMED = "CONFIRMED", "Confirmed"
+        UNKNOWN = "UNKNOWN", "Unknown"
+        RECONCILING = "RECONCILING", "Reconciling"
+        MANUAL_REVIEW = "MANUAL_REVIEW", "Manual review"
+
+    class ClearanceState(models.TextChoices):
+        UNVERIFIED = "UNVERIFIED", "Unverified"
+        DUE = "DUE", "Due"
+        CLEARED = "CLEARED", "Cleared"
+        EXCEPTION_APPROVED = "EXCEPTION_APPROVED", "Exception approved"
+
+    visit = models.OneToOneField(Visit, on_delete=models.PROTECT, related_name="financial_workflow")
+    estimate_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    deposit_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, blank=True)
+    deposit_state = models.CharField(max_length=20, choices=DepositState.choices, default=DepositState.UNVERIFIED)
+    clearance_state = models.CharField(max_length=24, choices=ClearanceState.choices, default=ClearanceState.UNVERIFIED)
+    policy_version = models.CharField(max_length=64, blank=True)

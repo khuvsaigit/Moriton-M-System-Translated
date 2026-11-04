@@ -21,11 +21,11 @@ class OperationWorkerTests(TestCase):
         self.branch_id = uuid4()
         self.aggregate_id = uuid4()
 
-    def add_operation(self, key):
+    def add_operation(self, key, action="reserve"):
         return accept_operation(
             organization_id=self.organization_id, branch_id=self.branch_id,
             aggregate_kind="prescription", aggregate_id=self.aggregate_id,
-            operation_id=uuid4(), business_key=key, action="reserve", payload_hash="a" * 64,
+            operation_id=uuid4(), business_key=key, action=action, payload_hash="a" * 64,
         )
 
     def test_successor_waits_until_predecessor_confirms(self):
@@ -39,6 +39,30 @@ class OperationWorkerTests(TestCase):
                        result_state=ExternalOperation.State.CONFIRMED, remote_id="remote-1")
         next_claim = claim_next(organization_id=self.organization_id, branch_id=self.branch_id, worker_id="worker-b")
         self.assertEqual(next_claim.operation_id, second.id)
+
+    def test_reserve_issue_release_invoice_are_executed_in_predecessor_order(self):
+        operations = [
+            self.add_operation("sequence-reserve", action="reserve"),
+            self.add_operation("sequence-issue", action="issue"),
+            self.add_operation("sequence-release", action="release"),
+            self.add_operation("sequence-invoice", action="invoice"),
+        ]
+        for index, expected in enumerate(operations):
+            claim = claim_next(
+                organization_id=self.organization_id, branch_id=self.branch_id,
+                worker_id=f"sequence-worker-{index}",
+            )
+            self.assertEqual(claim.operation_id, expected.id)
+            self.assertIsNone(claim_next(
+                organization_id=self.organization_id, branch_id=self.branch_id,
+                worker_id=f"blocked-worker-{index}",
+            ))
+            complete_claim(
+                operation_id=claim.operation_id, lease_token=claim.lease_token,
+                organization_id=self.organization_id, branch_id=self.branch_id,
+                result_state=ExternalOperation.State.CONFIRMED,
+                remote_id=f"mock-{expected.action}", evidence={"simulated": True},
+            )
 
     def test_expired_remote_write_becomes_unknown_and_rejects_stale_result(self):
         operation = self.add_operation("reserve-expiring")

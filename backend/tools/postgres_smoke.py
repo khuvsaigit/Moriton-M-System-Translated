@@ -22,7 +22,10 @@ SCOPED_TABLES = {
                  "registry_receptiontaskhistory", "registry_visit", "registry_visitassignment",
                  "registry_practitioner", "registry_practitionerqualification", "registry_practitionershift",
                  "registry_scheduleresource", "registry_appointment", "registry_screeningform",
-                 "registry_screeningformversion", "registry_screeninganswer", "registry_screeningreview"],
+                 "registry_screeningformversion", "registry_screeninganswer", "registry_screeningreview",
+                 "registry_prescription", "registry_prescriptionline", "registry_physicalmedicationissue",
+                 "registry_medicationadministration", "registry_medicationcorrectionintent",
+                 "registry_chargesource", "registry_financialworkflowstate"],
     "integrations": ["ledger_operationstream", "ledger_externaloperation", "ledger_call24importbatch",
                      "ledger_call24importrow", "ledger_integrationauditevent", "ledger_integrationoutboxevent",
                      "ledger_integrationinboxreceipt", "ledger_call24requestprojection"],
@@ -36,6 +39,7 @@ APPEND_ONLY_TABLES = {
     "integrations": [],
     "imaging": [],
 }
+IMMUTABLE_FACT_TABLES = {"clinical": ["registry_physicalmedicationissue", "registry_medicationadministration", "registry_chargesource"]}
 ROLE_LIMITS = {"clinical": 18, "integrations": 12, "imaging": 10}
 
 
@@ -74,6 +78,9 @@ def check_rls(service, dsn):
                 trigger_name = (f"{table}_published_immutable" if table.startswith("registry_screening")
                                 else f"{table}_append_only")
                 assert trigger_name in {row[0] for row in cursor.fetchall()}, f"append-only trigger missing on {table}"
+            for table in IMMUTABLE_FACT_TABLES.get(service, []):
+                cursor.execute("SELECT tgname FROM pg_trigger WHERE tgrelid = %s::regclass AND NOT tgisinternal", [table])
+                assert f"{table}_immutable" in {row[0] for row in cursor.fetchall()}, f"immutable fact trigger missing on {table}"
 
     organization_id, branch_id, actor_id, horse_id = (uuid4() for _ in range(4))
     other_org, other_branch = uuid4(), uuid4()
@@ -118,6 +125,38 @@ def check_rls(service, dsn):
                     "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,%s,%s,'REGISTERED',NULL,NULL)",
                     [visit_id, organization_id, branch_id, actor_id, horse_id, f"RLS-{visit_id.hex[:20]}"],
                 )
+                prescription_id, line_id, issue_id, administration_id = (uuid4() for _ in range(4))
+                charge_source_id = uuid4()
+                cursor.execute(
+                    "INSERT INTO registry_prescription "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, status, verified_by, verified_at, visit_id) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,2,'VERIFIED',%s,NOW(),%s)",
+                    [prescription_id, organization_id, branch_id, actor_id, actor_id, visit_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_prescriptionline "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, medication_name, prescribed_quantity, unit, instructions, prescription_id) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,'Smoke medicine',2,'mL','',%s)",
+                    [line_id, organization_id, branch_id, actor_id, prescription_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_physicalmedicationissue "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, quantity, unit, issued_at, prescription_line_id) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,1,'mL',NOW(),%s)",
+                    [issue_id, organization_id, branch_id, actor_id, line_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_medicationadministration "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, dose_quantity, unit, administered_at, performer_id, outcome, note, physical_issue_id) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,1,'mL',NOW(),%s,'GIVEN','',%s)",
+                    [administration_id, organization_id, branch_id, actor_id, actor_id, issue_id],
+                )
+                cursor.execute(
+                    "INSERT INTO registry_chargesource "
+                    "(id, organization_id, branch_id, created_at, updated_at, created_by, version, source_event_id, source_version, charge_type, quantity, unit_price, currency, invoice_line_ref, billing_state) "
+                    "VALUES (%s,%s,%s,NOW(),NOW(),%s,1,%s,1,'smoke',1,1,'MNT','', 'POLICY_PENDING')",
+                    [charge_source_id, organization_id, branch_id, actor_id, uuid4()],
+                )
                 cursor.execute(
                     "INSERT INTO registry_screeninganswer "
                     "(id, organization_id, branch_id, created_at, updated_at, created_by, version, form_version_id, visit_id, revision, answers, status, submitted_by, submitted_at) "
@@ -132,6 +171,18 @@ def check_rls(service, dsn):
                     try:
                         with conn.transaction():
                             cursor.execute(f"UPDATE {table} SET {column}='{{\"tampered\":true}}'::jsonb WHERE id=%s", [record_id])
+                    except psycopg.Error:
+                        rejected = True
+                    assert rejected, f"immutability trigger allowed UPDATE on {table}"
+                for table, record_id, column, value in (
+                    ("registry_physicalmedicationissue", issue_id, "quantity", 2),
+                    ("registry_medicationadministration", administration_id, "dose_quantity", 2),
+                    ("registry_chargesource", charge_source_id, "source_version", 2),
+                ):
+                    rejected = False
+                    try:
+                        with conn.transaction():
+                            cursor.execute(f"UPDATE {table} SET {column}=%s WHERE id=%s", [value, record_id])
                     except psycopg.Error:
                         rejected = True
                     assert rejected, f"immutability trigger allowed UPDATE on {table}"

@@ -11,6 +11,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 INSTALLED_APPS = ["django.contrib.contenttypes", "django.contrib.auth", "django.contrib.sessions", "rest_framework", "registry"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "registry.dev_cors.LocalFrontendCorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -27,6 +28,8 @@ SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 3600
 MORITON_LOCAL_AUTH_ENABLED = os.getenv("MORITON_LOCAL_AUTH_ENABLED", "0") == "1"
+MORITON_FRONTEND_ORIGIN = os.getenv("MORITON_FRONTEND_ORIGIN", "http://localhost:5500")
+CSRF_TRUSTED_ORIGINS = [MORITON_FRONTEND_ORIGIN] if DEBUG and MORITON_LOCAL_AUTH_ENABLED else []
 LOCAL_AUTH_ACTOR_ID = os.getenv("LOCAL_AUTH_ACTOR_ID", "")
 LOCAL_AUTH_ORGANIZATION_ID = os.getenv("LOCAL_AUTH_ORGANIZATION_ID", "")
 LOCAL_AUTH_BRANCH_ID = os.getenv("LOCAL_AUTH_BRANCH_ID", "")

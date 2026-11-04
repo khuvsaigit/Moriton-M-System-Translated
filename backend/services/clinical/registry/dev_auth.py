@@ -4,9 +4,11 @@ from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.db.models import F
 from django.http import Http404
+from django.http import JsonResponse
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +16,20 @@ from rest_framework.views import APIView
 from .identity import VerifiedIdentity, bind_verified_identity
 from .models import ServiceMembership
 from .security import scoped_atomic
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class LocalCsrfView(APIView):
+    """Issue a CSRF cookie for the local-only preview; never available outside DEBUG."""
+    authentication_classes: list[Any] = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not settings.DEBUG or not settings.MORITON_LOCAL_AUTH_ENABLED:
+            raise Http404
+        from django.middleware.csrf import get_token
+
+        return JsonResponse({"csrf_token": get_token(request)})
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -36,11 +52,16 @@ class LocalMockSessionView(APIView):
         if not role or not permissions:
             raise ImproperlyConfigured("Local mock role and permissions must be configured")
         with scoped_atomic(organization_id, branch_id):
-            membership, _ = ServiceMembership.objects.get_or_create(
+            membership, created = ServiceMembership.objects.get_or_create(
                 actor_id=actor_id, organization_id=organization_id,
                 branch_id=branch_id, role=role,
                 defaults={"permissions": permissions, "policy_version": 1, "active": True},
             )
+            if not created and (membership.permissions != permissions or not membership.active):
+                ServiceMembership.objects.filter(pk=membership.pk).update(
+                    permissions=permissions, active=True, policy_version=F("policy_version") + 1,
+                )
+                membership.refresh_from_db()
         bind_verified_identity(request, VerifiedIdentity(
             actor_id=actor_id, organization_id=organization_id, branch_id=branch_id,
             role=role, policy_version=membership.policy_version,

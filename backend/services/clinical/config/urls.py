@@ -1,8 +1,14 @@
 from django.urls import path
 from registry.api import (
+    ChargeSourceCreateView,
     ClinicalNoteRevisionView,
     HorseListCreateView,
     HealthView,
+    MedicationAdministrationCreateView,
+    MedicationCorrectionIntentCreateView,
+    PhysicalIssueCreateView,
+    PharmacyPrescriptionListView,
+    PrescriptionVerifyView,
     ReceptionTaskActionView,
     ReceptionTaskListCreateView,
     ReadyView,
@@ -10,8 +16,9 @@ from registry.api import (
     VisitAssignmentView,
     VisitDraftNoteView,
     VisitListCreateView,
+    VisitPrescriptionCreateView,
 )
-from registry.dev_auth import LocalMockSessionView
+from registry.dev_auth import LocalCsrfView, LocalMockSessionView
 
 urlpatterns = [
     path("api/v1/health/live", HealthView.as_view()),
@@ -25,4 +32,12 @@ urlpatterns = [
     path("api/v1/visits/<uuid:visit_id>/draft-notes", VisitDraftNoteView.as_view()),
     path("api/v1/clinical-notes/<uuid:note_id>/revisions", ClinicalNoteRevisionView.as_view()),
     path("api/v1/dev/session", LocalMockSessionView.as_view()),
+    path("api/v1/dev/csrf", LocalCsrfView.as_view()),
+    path("api/v1/pharmacy/prescriptions", PharmacyPrescriptionListView.as_view()),
+    path("api/v1/visits/<uuid:visit_id>/prescriptions", VisitPrescriptionCreateView.as_view()),
+    path("api/v1/prescriptions/<uuid:prescription_id>/verify", PrescriptionVerifyView.as_view()),
+    path("api/v1/prescription-lines/<uuid:line_id>/issues", PhysicalIssueCreateView.as_view()),
+    path("api/v1/physical-issues/<uuid:issue_id>/administrations", MedicationAdministrationCreateView.as_view()),
+    path("api/v1/prescriptions/<uuid:prescription_id>/correction-intents", MedicationCorrectionIntentCreateView.as_view()),
+    path("api/v1/billing/charge-sources", ChargeSourceCreateView.as_view()),
 ]

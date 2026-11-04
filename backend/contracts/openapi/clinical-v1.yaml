@@ -124,6 +124,81 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/DraftNoteRevision'}
       responses: {'201': {description: New immutable draft revision}, '404': {description: Note not found}, '409': {description: Version conflict}}
+  /pharmacy/prescriptions:
+    get:
+      operationId: listPharmacyPrescriptions
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: Branch-scoped prescriptions with immutable physical issues and administrations}}
+  /visits/{visit_id}/prescriptions:
+    post:
+      operationId: createDraftPrescription
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: visit_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PrescriptionCreate'}
+      responses: {'201': {description: Draft created with no stock reservation}, '400': {description: Validation error}, '404': {description: Visit not found}}
+  /prescriptions/{prescription_id}/verify:
+    post:
+      operationId: verifyPrescription
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: prescription_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VersionCheck'}
+      responses: {'200': {description: Prescription verified; this does not reserve ERP inventory}, '403': {description: Permission denied}, '409': {description: Version or state conflict}}
+  /prescription-lines/{line_id}/issues:
+    post:
+      operationId: recordPhysicalMedicationIssue
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: line_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PhysicalIssueCreate'}
+      responses: {'201': {description: Immutable physical issue fact; no Odoo write is sent}, '400': {description: Validation error}, '403': {description: Permission denied}, '409': {description: Prescription or quantity conflict}}
+  /physical-issues/{issue_id}/administrations:
+    post:
+      operationId: recordMedicationAdministration
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: issue_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdministrationCreate'}
+      responses: {'201': {description: Administration fact; no additional stock movement}, '400': {description: Validation error}, '403': {description: Permission denied}, '409': {description: Quantity conflict}}
+  /prescriptions/{prescription_id}/correction-intents:
+    post:
+      operationId: createMedicationCorrectionIntent
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: prescription_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MedicationCorrectionIntent'}
+      responses: {'202': {description: Intent recorded as pending policy; no correction or stock movement is applied}, '400': {description: Validation error}, '403': {description: Permission denied}}
+  /billing/charge-sources:
+    post:
+      operationId: recordChargeSource
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChargeSourceCreate'}
+      responses: {'201': {description: Stable charge provenance recorded; invoice creation remains policy-gated}, '400': {description: Validation error}, '403': {description: Permission denied}}
 components:
   schemas:
     HorseCreate:
@@ -192,5 +267,45 @@ components:
       properties:
         body: {type: string}
         expected_version: {type: integer, minimum: 1}
+    PrescriptionCreate:
+      type: object
+      required: [medication_name, quantity, unit]
+      properties:
+        medication_name: {type: string, maxLength: 200}
+        quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
+        unit: {type: string, maxLength: 32, description: Unit conversion is not performed without approved mapping}
+        instructions: {type: string}
+    PhysicalIssueCreate:
+      type: object
+      required: [quantity, unit]
+      properties:
+        quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
+        unit: {type: string, maxLength: 32}
+    AdministrationCreate:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
+        outcome: {type: string, maxLength: 24}
+        note: {type: string}
+    MedicationCorrectionIntent:
+      type: object
+      required: [kind, reason]
+      properties:
+        kind: {type: string, enum: [CANCEL, RELEASE, SUBSTITUTE, RETURN, WASTE]}
+        reason: {type: string, minLength: 1}
+        original_issue_id: {type: [string, 'null'], format: uuid}
+        quantity: {type: [string, 'null']}
+        unit: {type: string, maxLength: 32}
+    ChargeSourceCreate:
+      type: object
+      required: [source_event_id, source_version, charge_type, quantity, unit_price, currency]
+      properties:
+        source_event_id: {type: string, format: uuid}
+        source_version: {type: integer, minimum: 1}
+        charge_type: {type: string, maxLength: 40}
+        quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
+        unit_price: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
+        currency: {type: string, minLength: 3, maxLength: 3}
   securitySchemes:
     sessionAuth: {type: apiKey, in: cookie, name: sessionid}

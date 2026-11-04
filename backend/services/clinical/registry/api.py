@@ -11,7 +11,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .errors import api_error
-from .models import ClinicalNote, Horse, ReceptionTask, Visit
+from .models import (
+    ClinicalNote, Horse, PhysicalMedicationIssue, Prescription,
+    PrescriptionLine, ReceptionTask, Visit,
+)
+from .pharmacy import (
+    create_charge_source, create_draft_prescription, record_administration,
+    record_correction_intent, record_physical_issue, verify_prescription,
+)
 from .security import authorize, scoped_atomic
 from .workflows import (
     DomainConflict,
@@ -89,6 +96,164 @@ def _visit_json(visit: Visit) -> dict:
                             "version": current_note.version, "body": latest_revision.body if latest_revision else ""}
                            if current_note else None),
             "version": visit.version}
+
+
+def _prescription_json(prescription: Prescription) -> dict:
+    lines = []
+    for line in prescription.lines.order_by("created_at", "id"):
+        issues = [{"id": str(issue.id), "quantity": str(issue.quantity), "unit": issue.unit,
+                   "issued_at": issue.issued_at.isoformat(),
+                   "external_posting_state": "NOT_SUBMITTED",
+                   "administrations": [{"id": str(row.id), "quantity": str(row.dose_quantity),
+                                        "unit": row.unit, "administered_at": row.administered_at.isoformat(),
+                                        "outcome": row.outcome}
+                                       for row in issue.administrations.order_by("administered_at", "id")]}
+                  for issue in line.physical_issues.order_by("issued_at", "id")]
+        lines.append({"id": str(line.id), "medication_name": line.medication_name,
+                      "prescribed_quantity": str(line.prescribed_quantity), "unit": line.unit,
+                      "instructions": line.instructions, "physical_issues": issues})
+    return {"id": str(prescription.id), "visit_id": str(prescription.visit_id),
+            "status": prescription.status, "version": prescription.version,
+            "verified_by": str(prescription.verified_by) if prescription.verified_by else None,
+            "verified_at": prescription.verified_at.isoformat() if prescription.verified_at else None,
+            "lines": lines}
+
+
+class PharmacyPrescriptionListView(APIView):
+    def get(self, request):
+        scope = _scope(request, "pharmacy.read")
+        with scoped_atomic(scope.organization_id, scope.branch_id):
+            prescriptions = Prescription.objects.filter(
+                organization_id=scope.organization_id, branch_id=scope.branch_id,
+            ).select_related("visit").order_by("-created_at")[:100]
+            items = [_prescription_json(item) for item in prescriptions]
+        return Response({"items": items, "next": None})
+
+
+class VisitPrescriptionCreateView(APIView):
+    def post(self, request, visit_id):
+        scope = _scope(request, "pharmacy.prescribe")
+        try:
+            prescription = create_draft_prescription(
+                visit_id=visit_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                medication_name=str(request.data.get("medication_name", "")),
+                quantity=request.data.get("quantity", ""), unit=str(request.data.get("unit", "")),
+                instructions=str(request.data.get("instructions", "")),
+            )
+        except Visit.DoesNotExist as exc:
+            raise NotFound("Visit not found.") from exc
+        except ValueError as exc:
+            raise ValidationError({"detail": [str(exc)]}) from exc
+        with scoped_atomic(scope.organization_id, scope.branch_id):
+            prescription = Prescription.objects.prefetch_related("lines__physical_issues__administrations").get(
+                pk=prescription.pk, organization_id=scope.organization_id, branch_id=scope.branch_id,
+            )
+        return Response(_prescription_json(prescription), status=status.HTTP_201_CREATED)
+
+
+class PrescriptionVerifyView(APIView):
+    def post(self, request, prescription_id):
+        scope = _scope(request, "pharmacy.verify")
+        try:
+            prescription = verify_prescription(
+                prescription_id=prescription_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                expected_version=_version(request.data),
+            )
+        except Prescription.DoesNotExist as exc:
+            raise NotFound("Prescription not found.") from exc
+        except ValueError as exc:
+            return api_error(request, code="prescription_conflict", message=str(exc), status_code=409)
+        with scoped_atomic(scope.organization_id, scope.branch_id):
+            prescription = Prescription.objects.prefetch_related("lines__physical_issues__administrations").get(
+                pk=prescription.pk, organization_id=scope.organization_id, branch_id=scope.branch_id,
+            )
+        return Response(_prescription_json(prescription))
+
+
+class PhysicalIssueCreateView(APIView):
+    def post(self, request, line_id):
+        scope = _scope(request, "pharmacy.dispense")
+        try:
+            issue = record_physical_issue(
+                line_id=line_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                quantity=request.data.get("quantity", ""), unit=str(request.data.get("unit", "")),
+            )
+        except PrescriptionLine.DoesNotExist as exc:
+            raise NotFound("Prescription line not found.") from exc
+        except ValueError as exc:
+            return api_error(request, code="physical_issue_conflict", message=str(exc), status_code=409)
+        return Response({"physical_issue_id": str(issue.id), "prescription_line_id": str(issue.prescription_line_id),
+                         "quantity": str(issue.quantity), "unit": issue.unit,
+                         "external_posting_state": "NOT_SUBMITTED",
+                         "stock_posted_to_odoo": False}, status=status.HTTP_201_CREATED)
+
+
+class MedicationAdministrationCreateView(APIView):
+    def post(self, request, issue_id):
+        scope = _scope(request, "pharmacy.administer")
+        try:
+            administration = record_administration(
+                issue_id=issue_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                quantity=request.data.get("quantity", ""),
+                outcome=str(request.data.get("outcome", "GIVEN")),
+                note=str(request.data.get("note", "")),
+            )
+        except PhysicalMedicationIssue.DoesNotExist as exc:
+            raise NotFound("Physical issue not found.") from exc
+        except ValueError as exc:
+            return api_error(request, code="administration_conflict", message=str(exc), status_code=409)
+        return Response({"id": str(administration.id), "physical_issue_id": str(administration.physical_issue_id),
+                         "dose_quantity": str(administration.dose_quantity), "unit": administration.unit,
+                         "administered_at": administration.administered_at.isoformat(),
+                         "stock_movement_created": False}, status=status.HTTP_201_CREATED)
+
+
+class MedicationCorrectionIntentCreateView(APIView):
+    def post(self, request, prescription_id):
+        scope = _scope(request, "pharmacy.correction.request")
+        original_issue_id = request.data.get("original_issue_id")
+        try:
+            intent = record_correction_intent(
+                prescription_id=prescription_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                kind=str(request.data.get("kind", "")), reason=str(request.data.get("reason", "")),
+                original_issue_id=_uuid(original_issue_id, "original_issue_id") if original_issue_id else None,
+                quantity=request.data.get("quantity"), unit=str(request.data.get("unit", "")),
+            )
+        except Prescription.DoesNotExist as exc:
+            raise NotFound("Prescription not found.") from exc
+        except (PhysicalMedicationIssue.DoesNotExist, ValueError) as exc:
+            raise ValidationError({"detail": [str(exc)]}) from exc
+        return Response({"id": str(intent.id), "kind": intent.kind, "state": intent.state,
+                         "effect_applied": False, "original_issue_id": str(intent.original_issue_id) if intent.original_issue_id else None},
+                        status=status.HTTP_202_ACCEPTED)
+
+
+class ChargeSourceCreateView(APIView):
+    def post(self, request):
+        scope = _scope(request, "billing.source.record")
+        try:
+            source_version = int(request.data.get("source_version"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"source_version": ["A positive integer is required."]}) from exc
+        if source_version < 1:
+            raise ValidationError({"source_version": ["A positive integer is required."]})
+        source = create_charge_source(
+            organization_id=scope.organization_id, branch_id=scope.branch_id,
+            actor_id=scope.actor_id,
+            source_event_id=_uuid(request.data.get("source_event_id"), "source_event_id"),
+            source_version=source_version, charge_type=str(request.data.get("charge_type", "")),
+            quantity=request.data.get("quantity", ""), unit_price=request.data.get("unit_price", ""),
+            currency=str(request.data.get("currency", "")),
+        )
+        return Response({"id": str(source.id), "source_event_id": str(source.source_event_id),
+                         "source_version": source.source_version, "charge_type": source.charge_type,
+                         "billing_state": source.billing_state, "invoice_created": False},
+                        status=status.HTTP_201_CREATED)
 
 
 class HealthView(APIView):

@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from .models import IntegrationOutboxEvent
@@ -47,15 +47,28 @@ class LeasedEvent:
 
 
 def claim_event(*, organization_id: UUID, branch_id: UUID, worker_id: str,
-                lease_seconds: int = 60, now=None) -> LeasedEvent | None:
+                lease_seconds: int = 60, now=None, destination: str | None = None) -> LeasedEvent | None:
     if not worker_id.strip() or lease_seconds < 1:
         raise ValueError("worker id and positive lease duration are required")
     now = now or timezone.now()
     with scoped_atomic(organization_id, branch_id):
-        event = (IntegrationOutboxEvent.objects.select_for_update(skip_locked=True, of=("self",))
-                 .filter(organization_id=organization_id, branch_id=branch_id, published_at__isnull=True)
-                 .filter(Q(lease_until__isnull=True) | Q(lease_until__lte=now))
-                 .order_by("occurred_at", "id").first())
+        earlier_unpublished = IntegrationOutboxEvent.objects.filter(
+            organization_id=OuterRef("organization_id"),
+            branch_id=OuterRef("branch_id"),
+            aggregate_id=OuterRef("aggregate_id"),
+            aggregate_version__lt=OuterRef("aggregate_version"),
+            published_at__isnull=True,
+        )
+        eligible = (IntegrationOutboxEvent.objects.select_for_update(skip_locked=True, of=("self",))
+            .annotate(has_unpublished_predecessor=Exists(earlier_unpublished))
+            .filter(has_unpublished_predecessor=False)
+            )
+        eligible = eligible.filter(
+            organization_id=organization_id, branch_id=branch_id, published_at__isnull=True,
+        ).filter(Q(lease_until__isnull=True) | Q(lease_until__lte=now))
+        if destination is not None:
+            eligible = eligible.filter(payload__destination=destination)
+        event = eligible.order_by("occurred_at", "id").first()
         if event is None:
             return None
         token = uuid4()
@@ -88,10 +101,12 @@ def acknowledge_published(*, event_id: UUID, organization_id: UUID, branch_id: U
 
 
 def publish_one(*, organization_id: UUID, branch_id: UUID, worker_id: str,
-                transport: JsonEventTransport, lease_seconds: int = 60, now=None) -> UUID | None:
+                transport: JsonEventTransport, lease_seconds: int = 60, now=None,
+                destination: str | None = None) -> UUID | None:
     """Send one leased event. Send/ack gaps are deliberately recovered as duplicate delivery."""
     leased = claim_event(organization_id=organization_id, branch_id=branch_id,
-                         worker_id=worker_id, lease_seconds=lease_seconds, now=now)
+                         worker_id=worker_id, lease_seconds=lease_seconds, now=now,
+                         destination=destination)
     if leased is None:
         return None
     # Any exception leaves the lease for expiry/retry. The remote queue may have accepted the send.

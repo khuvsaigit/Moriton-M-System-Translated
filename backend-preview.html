@@ -73,8 +73,23 @@
       </div>
       <p id="visit-status" class="muted">No visit selected.</p>
     </section>
+    <section class="card" id="appointment-demo">
+      <h2>4. Appointment booking and arrival</h2>
+      <p class="muted">Local prototype: booking, staff confirmation and physical arrival are separate actions. Arrival does not create a clinical visit or grant screening clearance.</p>
+      <form id="appointment-form" class="row" style="margin-top:12px">
+        <div class="field"><label for="appointment-horse">Horse *</label><select id="appointment-horse" required style="width:100%;padding:10px;border:1px solid #b8c6cc;border-radius:6px;font:inherit"><option value="">Connect and load horses first</option></select></div>
+        <div class="field"><label for="appointment-resource">Room / resource ID</label><input id="appointment-resource" placeholder="Optional UUID"></div>
+        <div class="field"><label for="appointment-practitioner">Practitioner ID</label><input id="appointment-practitioner" placeholder="Optional UUID"></div>
+        <div class="field"><label for="appointment-start">Starts *</label><input id="appointment-start" type="datetime-local" required></div>
+        <div class="field"><label for="appointment-end">Ends *</label><input id="appointment-end" type="datetime-local" required></div>
+        <button id="request-appointment" type="submit">Request appointment</button>
+      </form>
+      <p class="muted" style="margin-top:8px">At least one room/resource or practitioner UUID is required to reserve time.</p>
+      <div id="appointment-status" class="muted" role="status" aria-live="polite">No appointment in this demo yet.</div>
+      <div id="appointment-records"></div>
+    </section>
     <section class="card">
-      <h2>4. Pharmacy workflow prototype</h2>
+      <h2>5. Pharmacy workflow prototype</h2>
       <form id="prescription-form" class="row">
         <div class="field"><label for="medicine-name">Medication *</label><input id="medicine-name" required maxlength="200"></div>
         <div class="field" style="flex:0 1 140px"><label for="prescribed-quantity">Prescribed quantity *</label><input id="prescribed-quantity" type="number" min="0.0001" step="0.0001" required></div>

@@ -60,6 +60,7 @@ class ReceptionTask(ScopedRecord):
     source = models.CharField(max_length=24, default="manual")
     source_request_id = models.CharField(max_length=120, blank=True)
     source_revision = models.CharField(max_length=64, blank=True)
+    source_aggregate_version = models.PositiveIntegerField(default=0)
     source_time_local = models.CharField(max_length=80, blank=True)
     source_call_ids = models.JSONField(default=list, blank=True)
     category_labels = models.JSONField(default=list, blank=True)
@@ -306,6 +307,7 @@ class Appointment(ScopedRecord):
     class Status(models.TextChoices):
         REQUESTED = "REQUESTED", "Requested"
         CONFIRMED = "CONFIRMED", "Confirmed"
+        ARRIVED = "ARRIVED", "Arrived"
         CANCELLED = "CANCELLED", "Cancelled"
         COMPLETED = "COMPLETED", "Completed"
 
@@ -316,6 +318,10 @@ class Appointment(ScopedRecord):
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.REQUESTED)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.UUIDField(null=True, blank=True)
+    arrived_at = models.DateTimeField(null=True, blank=True)
+    arrival_recorded_by = models.UUIDField(null=True, blank=True)
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(ends_at__gt=models.F("starts_at")), name="appointment_positive_window")]
         indexes = [models.Index(fields=["organization_id", "branch_id", "starts_at", "status"])]

@@ -8,6 +8,7 @@ from .models import (
     AuditEvent,
     ClinicalNoteRevision,
     Contact,
+    InboxReceipt,
     ReceptionTask,
     ReceptionTaskHistory,
     ServiceMembership,
@@ -94,6 +95,39 @@ class RegistryWorkflowTests(TestCase):
         envelope["payload"]["summary"] = "Changed body using same message ID"
         with self.assertRaises(ValueError):
             ingest_call24_request(envelope)
+
+    def test_call24_out_of_order_source_revision_cannot_regress_reception_projection(self):
+        aggregate_id = uuid4()
+        correlation_id = uuid4()
+
+        def event(version, message_id, revision, summary):
+            return {
+                "schema_version": 1, "message_id": str(message_id),
+                "message_type": "call24.request.received.v1", "producer": "integrations",
+                "destination": "clinical", "organization_id": str(self.organization_id),
+                "branch_id": str(self.branch_id), "aggregate_id": str(aggregate_id),
+                "aggregate_version": version, "operation_id": str(uuid4()),
+                "correlation_id": str(correlation_id), "causation_id": None,
+                "occurred_at": "2026-11-05T00:00:00+00:00",
+                "actor_reference": "call24-local-import", "policy_version": "call24-csv-mapping-v1",
+                "payload": {"source_request_id": "TASK-VERSIONED", "source_call_ids": [],
+                            "status": "answered", "received_at": None,
+                            "source_time_local": "2026-09-04T10:15:00", "category_labels": [],
+                            "customer_name": "Synthetic", "phone": None, "summary": summary,
+                            "source_revision": revision, "complaint": None,
+                            "matching_status": "unconfirmed"},
+            }
+
+        latest, created = ingest_call24_request(event(2, uuid4(), "b" * 64, "new revision"))
+        self.assertTrue(created)
+        stale, stale_created = ingest_call24_request(event(1, uuid4(), "a" * 64, "old revision"))
+        latest.refresh_from_db()
+        self.assertFalse(stale_created)
+        self.assertEqual(stale.id, latest.id)
+        self.assertEqual(latest.source_aggregate_version, 2)
+        self.assertEqual(latest.source_revision, "b" * 64)
+        self.assertEqual(latest.summary, "new revision")
+        self.assertEqual(InboxReceipt.objects.filter(producer="integrations").count(), 2)
 
     def test_reception_actions_use_optimistic_versions_and_keep_history(self):
         horse = self.create_horse()

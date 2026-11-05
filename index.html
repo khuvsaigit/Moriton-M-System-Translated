@@ -206,6 +206,35 @@
           </div>
         </div>
 
+        <div class="card" id="d-backend-demo" hidden>
+          <div class="ch">🧪 P1 BACKEND TEST · LOCAL DEMO ONLY <span class="ch-r" id="bkd-session-state">Not connected</span></div>
+          <div style="background:var(--gold-soft,#f6efdc);padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.5;margin-bottom:12px">
+            This opt-in panel talks only to the localhost Clinical API using a separate short-lived demo session. It does not read or write Firebase records. Use synthetic test data.
+          </div>
+          <div class="fg r2">
+            <div class="fld"><label>Local Clinical API</label><input class="inp" id="bkd-api-base" value="http://localhost:8001" autocomplete="url"></div>
+            <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><button type="button" class="btn btn-p" id="bkd-connect">Connect local demo</button></div>
+          </div>
+          <div class="fg r2" style="margin-top:8px">
+            <div class="fld"><label>Create a synthetic local horse</label><input class="inp" id="bkd-horse-name" value="Demo Horse" maxlength="160"></div>
+            <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><button type="button" class="btn btn-sm" id="bkd-create-horse">Create in local backend</button></div>
+          </div>
+          <div class="fg r2" style="margin-top:8px">
+            <div class="fld"><label>Local backend horse</label><select class="inp" id="bkd-horse"><option value="">Connect to load local horses</option></select></div>
+            <div class="fld"><label>Local resource</label><div style="display:flex;gap:6px"><select class="inp" id="bkd-resource" style="flex:1"><option value="">Create a local demo resource</option></select><button type="button" class="btn btn-sm" id="bkd-create-resource">+ Room</button></div></div>
+          </div>
+          <div class="fg r2" style="margin-top:8px">
+            <div class="fld"><label>Starts</label><input class="inp" id="bkd-starts" type="datetime-local"></div>
+            <div class="fld"><label>Ends</label><input class="inp" id="bkd-ends" type="datetime-local"></div>
+          </div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px">
+            <button type="button" class="btn btn-p" id="bkd-request">Request appointment</button>
+            <button type="button" class="btn" id="bkd-confirm" disabled>Confirm booking</button>
+            <button type="button" class="btn" id="bkd-arrive" disabled>Record arrival</button>
+          </div>
+          <div id="bkd-result" role="status" aria-live="polite" style="font-size:12px;margin-top:10px;color:var(--muted)">Open this dashboard with ?backendDemo=1 to show this panel.</div>
+        </div>
+
         <div class="col2">
           <div class="card">
             <div class="ch">👥 Хүний нөөц <span class="ch-r" id="d-staff-date">Өнөөдөр</span></div>
@@ -1806,6 +1835,7 @@
 <script src="pharmacy.js?v=20261023"></script>
 <script src="timesheet.js?v=20261023"></script>
 <script src="dailyreport.js?v=20261023"></script>
+<script src="dashboard-backend-demo.js?v=20261105"></script>
 
 <!-- PWA: service worker бүртгэх, автомат шинэчлэлт, суулгах товч -->
 <script src="pwa.js?v=20260731"></script>

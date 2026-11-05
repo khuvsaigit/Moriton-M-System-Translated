@@ -5,6 +5,7 @@ from datetime import datetime
 from uuid import UUID
 
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import (
     Appointment,
@@ -81,7 +82,7 @@ def request_appointment(*, organization_id: UUID, branch_id: UUID, actor_id: UUI
             )
         conflicts = Appointment.objects.filter(
             organization_id=organization_id, branch_id=branch_id,
-            status__in=[Appointment.Status.REQUESTED, Appointment.Status.CONFIRMED],
+            status__in=[Appointment.Status.REQUESTED, Appointment.Status.CONFIRMED, Appointment.Status.ARRIVED],
             starts_at__lt=ends_at, ends_at__gt=starts_at,
         )
         conflict_scope = Q(pk__in=[])
@@ -105,6 +106,62 @@ def request_appointment(*, organization_id: UUID, branch_id: UUID, actor_id: UUI
                      "ends_at": ends_at.isoformat()},
         )
         return appointment
+
+
+def _transition_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,
+                            actor_id: UUID, expected_version: int, target: str) -> Appointment:
+    with scoped_atomic(organization_id, branch_id):
+        appointment = Appointment.objects.select_for_update().get(
+            pk=appointment_id, organization_id=organization_id, branch_id=branch_id,
+        )
+        if appointment.version != expected_version:
+            raise ValueError("appointment version conflict")
+        old_status = appointment.status
+        if target == Appointment.Status.CONFIRMED:
+            if old_status != Appointment.Status.REQUESTED:
+                raise ValueError("only a requested appointment can be confirmed")
+            appointment.confirmed_at = timezone.now()
+            appointment.confirmed_by = actor_id
+            fields = ["status", "confirmed_at", "confirmed_by", "version", "updated_at"]
+            action = "appointment.confirmed"
+        elif target == Appointment.Status.ARRIVED:
+            if old_status != Appointment.Status.CONFIRMED:
+                raise ValueError("only a confirmed appointment can be marked arrived")
+            appointment.arrived_at = timezone.now()
+            appointment.arrival_recorded_by = actor_id
+            fields = ["status", "arrived_at", "arrival_recorded_by", "version", "updated_at"]
+            action = "appointment.arrived"
+        else:
+            raise ValueError("unsupported appointment transition")
+        appointment.status = target
+        appointment.version += 1
+        appointment.save(update_fields=fields)
+        AuditEvent.objects.create(
+            organization_id=organization_id, branch_id=branch_id, actor_id=actor_id,
+            action=action, aggregate_type="appointment", aggregate_id=appointment.id,
+            aggregate_version=appointment.version, correlation_id=appointment.id,
+            details={"previous_status": old_status, "expected_version": expected_version,
+                     "clinical_clearance_granted": False, "visit_created": False},
+        )
+        return appointment
+
+
+def confirm_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,
+                        actor_id: UUID, expected_version: int) -> Appointment:
+    """Confirm staff booking; this does not record arrival or clinical clearance."""
+    return _transition_appointment(
+        appointment_id=appointment_id, organization_id=organization_id, branch_id=branch_id,
+        actor_id=actor_id, expected_version=expected_version, target=Appointment.Status.CONFIRMED,
+    )
+
+
+def mark_appointment_arrived(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,
+                             actor_id: UUID, expected_version: int) -> Appointment:
+    """Record physical arrival independently from visit creation and screening."""
+    return _transition_appointment(
+        appointment_id=appointment_id, organization_id=organization_id, branch_id=branch_id,
+        actor_id=actor_id, expected_version=expected_version, target=Appointment.Status.ARRIVED,
+    )
 
 
 def cancel_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,

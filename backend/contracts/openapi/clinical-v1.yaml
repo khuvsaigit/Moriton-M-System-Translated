@@ -10,6 +10,32 @@ paths:
     get:
       operationId: clinicalReadiness
       responses: {'200': {description: Service readiness}}
+  /appointments/{appointment_id}/actions:
+    post:
+      operationId: transitionAppointment
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: path, name: appointment_id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AppointmentAction'}
+      responses:
+        '200': {description: Appointment confirmation or physical arrival recorded independently of visit creation and clinical clearance}
+        '409': {description: Invalid transition or stale version}
+  /appointments:
+    post:
+      operationId: requestAppointment
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AppointmentRequest'}
+      responses:
+        '201': {description: Requested slot; no clinical arrival or clearance implied}
+        '409': {description: Resource conflict or invalid appointment window}
   /horses:
     get:
       operationId: searchHorses
@@ -307,5 +333,20 @@ components:
         quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
         unit_price: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
         currency: {type: string, minLength: 3, maxLength: 3}
+    AppointmentAction:
+      type: object
+      required: [action, expected_version]
+      properties:
+        action: {type: string, enum: [confirm, arrive]}
+        expected_version: {type: integer, minimum: 1}
+    AppointmentRequest:
+      type: object
+      required: [horse_id, starts_at, ends_at]
+      properties:
+        horse_id: {type: string, format: uuid}
+        practitioner_id: {type: [string, 'null'], format: uuid}
+        resource_id: {type: [string, 'null'], format: uuid}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
   securitySchemes:
     sessionAuth: {type: apiKey, in: cookie, name: sessionid}

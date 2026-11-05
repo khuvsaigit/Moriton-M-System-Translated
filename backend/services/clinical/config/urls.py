@@ -1,6 +1,8 @@
 from django.urls import path
 from registry.api import (
     ChargeSourceCreateView,
+    AppointmentActionView,
+    AppointmentRequestView,
     ClinicalNoteRevisionView,
     HorseListCreateView,
     HealthView,
@@ -18,7 +20,8 @@ from registry.api import (
     VisitListCreateView,
     VisitPrescriptionCreateView,
 )
-from registry.dev_auth import LocalCsrfView, LocalMockSessionView
+from registry.dev_auth import LocalCsrfView, LocalDemoScheduleResourceView, LocalMockSessionView
+from registry.internal_events import LocalCall24EventView
 
 urlpatterns = [
     path("api/v1/health/live", HealthView.as_view()),
@@ -27,12 +30,16 @@ urlpatterns = [
     path("api/v1/reception/tasks", ReceptionTaskListCreateView.as_view()),
     path("api/v1/reception/tasks/<uuid:task_id>/actions", ReceptionTaskActionView.as_view()),
     path("api/v1/visits", VisitListCreateView.as_view()),
+    path("api/v1/appointments", AppointmentRequestView.as_view()),
+    path("api/v1/appointments/<uuid:appointment_id>/actions", AppointmentActionView.as_view()),
     path("api/v1/visits/<uuid:visit_id>/arrival", VisitArrivalView.as_view()),
     path("api/v1/visits/<uuid:visit_id>/assignments", VisitAssignmentView.as_view()),
     path("api/v1/visits/<uuid:visit_id>/draft-notes", VisitDraftNoteView.as_view()),
     path("api/v1/clinical-notes/<uuid:note_id>/revisions", ClinicalNoteRevisionView.as_view()),
     path("api/v1/dev/session", LocalMockSessionView.as_view()),
+    path("api/v1/dev/scheduling-resources", LocalDemoScheduleResourceView.as_view()),
     path("api/v1/dev/csrf", LocalCsrfView.as_view()),
+    path("api/v1/internal/events/call24", LocalCall24EventView.as_view()),
     path("api/v1/pharmacy/prescriptions", PharmacyPrescriptionListView.as_view()),
     path("api/v1/visits/<uuid:visit_id>/prescriptions", VisitPrescriptionCreateView.as_view()),
     path("api/v1/prescriptions/<uuid:prescription_id>/verify", PrescriptionVerifyView.as_view()),

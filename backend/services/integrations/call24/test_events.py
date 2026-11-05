@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from ledger.models import Call24RequestProjection, IntegrationOutboxEvent
-from ledger.outbox import publish_one
+from ledger.outbox import acknowledge_published, claim_event, publish_one
 
 from .adapter import parse_csv
 from .events import enqueue_call24_preview
@@ -95,3 +95,31 @@ class Call24EventTests(TestCase):
         row.refresh_from_db()
         self.assertIsNotNone(row.published_at)
         self.assertEqual(row.attempt_count, 2)
+
+    def test_outbox_does_not_claim_a_later_revision_until_predecessor_is_acknowledged(self):
+        aggregate_id = uuid4()
+        first_id, second_id = uuid4(), uuid4()
+        for message_id, version in ((first_id, 1), (second_id, 2)):
+            IntegrationOutboxEvent.objects.create(
+                id=message_id, organization_id=self.organization_id,
+                branch_id=self.branch_id, message_type="call24.request.received.v1",
+                schema_version=1, aggregate_id=aggregate_id, aggregate_version=version,
+                correlation_id=self.correlation_id,
+                payload={"message_id": str(message_id), "destination": "clinical"},
+            )
+
+        first = claim_event(organization_id=self.organization_id,
+                            branch_id=self.branch_id, worker_id="worker-a",
+                            destination="clinical")
+        self.assertEqual(first.event_id, first_id)
+        blocked = claim_event(organization_id=self.organization_id,
+                              branch_id=self.branch_id, worker_id="worker-b",
+                              destination="clinical")
+        self.assertIsNone(blocked)
+        acknowledge_published(event_id=first.event_id,
+                              organization_id=self.organization_id,
+                              branch_id=self.branch_id, lease_token=first.token)
+        second = claim_event(organization_id=self.organization_id,
+                             branch_id=self.branch_id, worker_id="worker-b",
+                             destination="clinical")
+        self.assertEqual(second.event_id, second_id)

@@ -14,3 +14,6 @@ USE_TZ = True
 TIME_ZONE = "UTC"
 REST_FRAMEWORK = {"DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"], "DEFAULT_AUTHENTICATION_CLASSES": [], "EXCEPTION_HANDLER": "config.errors.exception_handler_v1"}
 ODOO_WRITES_ENABLED = os.getenv("ODOO_WRITES_ENABLED", "0") == "1"
+CALL24_CSV_IMPORT_ENABLED = os.getenv("CALL24_CSV_IMPORT_ENABLED", "0") == "1"
+CALL24_CLINICAL_EVENT_URL = os.getenv("CALL24_CLINICAL_EVENT_URL", "http://clinical:8000/api/v1/internal/events/call24")
+LOCAL_CALL24_BRIDGE_TOKEN = os.getenv("LOCAL_CALL24_BRIDGE_TOKEN", "")

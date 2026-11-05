@@ -19,13 +19,22 @@ services:
       LOCAL_AUTH_BRANCH_ID: ${LOCAL_AUTH_BRANCH_ID:-}
       LOCAL_AUTH_ROLE: ${LOCAL_AUTH_ROLE:-}
       LOCAL_AUTH_PERMISSIONS: ${LOCAL_AUTH_PERMISSIONS:-}
+      LOCAL_CALL24_BRIDGE_ENABLED: ${LOCAL_CALL24_BRIDGE_ENABLED:-1}
+      LOCAL_CALL24_BRIDGE_TOKEN: ${LOCAL_CALL24_BRIDGE_TOKEN:-local-dev-only-call24-bridge-token}
     ports: ["127.0.0.1:8001:8000"]
     depends_on: {postgres: {condition: service_healthy}}
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]
   integrations:
     build: ./services/integrations
     image: moriton/integrations:${MORITON_IMAGE_TAG:-local}
-    environment: {DATABASE_URL: postgresql://integrations:integrations@postgres:5432/integration_db, DJANGO_SECRET_KEY: local-only-change-me, DJANGO_DEBUG: "1", ODOO_WRITES_ENABLED: "0"}
+    environment:
+      DATABASE_URL: postgresql://integrations:integrations@postgres:5432/integration_db
+      DJANGO_SECRET_KEY: local-only-change-me
+      DJANGO_DEBUG: "1"
+      ODOO_WRITES_ENABLED: "0"
+      CALL24_CSV_IMPORT_ENABLED: ${CALL24_CSV_IMPORT_ENABLED:-1}
+      CALL24_CLINICAL_EVENT_URL: http://clinical:8000/api/v1/internal/events/call24
+      LOCAL_CALL24_BRIDGE_TOKEN: ${LOCAL_CALL24_BRIDGE_TOKEN:-local-dev-only-call24-bridge-token}
     ports: ["127.0.0.1:8002:8000"]
     depends_on: {postgres: {condition: service_healthy}}
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]

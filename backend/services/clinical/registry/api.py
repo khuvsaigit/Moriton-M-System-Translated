@@ -4,6 +4,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from django.db import connection
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
@@ -12,14 +13,15 @@ from rest_framework.views import APIView
 
 from .errors import api_error
 from .models import (
-    ClinicalNote, Horse, PhysicalMedicationIssue, Prescription,
-    PrescriptionLine, ReceptionTask, Visit,
+    Appointment, ClinicalNote, Horse, PhysicalMedicationIssue, Practitioner, Prescription,
+    PrescriptionLine, ReceptionTask, ScheduleResource, Visit,
 )
 from .pharmacy import (
     create_charge_source, create_draft_prescription, record_administration,
     record_correction_intent, record_physical_issue, verify_prescription,
 )
 from .security import authorize, scoped_atomic
+from .scheduling import confirm_appointment, mark_appointment_arrived, request_appointment
 from .workflows import (
     DomainConflict,
     DuplicateIdentity,
@@ -76,6 +78,7 @@ def _task_json(task: ReceptionTask) -> dict:
     return {"id": str(task.id), "source": task.source, "source_request_id": task.source_request_id,
             "status": task.status, "customer_name": task.customer_name, "phone": task.phone,
             "summary": task.summary, "identity_status": task.identity_status,
+            "source_aggregate_version": task.source_aggregate_version,
             "assigned_to": str(task.assigned_to) if task.assigned_to else None,
             "horse_id": str(task.linked_horse_id) if task.linked_horse_id else None,
             "visit_id": str(task.visit_id) if task.visit_id else None,
@@ -254,6 +257,69 @@ class ChargeSourceCreateView(APIView):
                          "source_version": source.source_version, "charge_type": source.charge_type,
                          "billing_state": source.billing_state, "invoice_created": False},
                         status=status.HTTP_201_CREATED)
+
+
+def _appointment_json(appointment: Appointment) -> dict:
+    return {"id": str(appointment.id), "horse_id": str(appointment.horse_id),
+            "visit_id": str(appointment.visit_id) if appointment.visit_id else None,
+            "status": appointment.status, "starts_at": appointment.starts_at.isoformat(),
+            "ends_at": appointment.ends_at.isoformat(),
+            "confirmed_at": appointment.confirmed_at.isoformat() if appointment.confirmed_at else None,
+            "confirmed_by": str(appointment.confirmed_by) if appointment.confirmed_by else None,
+            "arrived_at": appointment.arrived_at.isoformat() if appointment.arrived_at else None,
+            "arrival_recorded_by": str(appointment.arrival_recorded_by) if appointment.arrival_recorded_by else None,
+            "version": appointment.version,
+            "visit_created": False, "clinical_clearance_granted": False}
+
+
+class AppointmentActionView(APIView):
+    actions = {"confirm": ("appointment.confirm", confirm_appointment),
+               "arrive": ("appointment.arrive", mark_appointment_arrived)}
+
+    def post(self, request, appointment_id):
+        action = str(request.data.get("action", ""))
+        configured = self.actions.get(action)
+        if configured is None:
+            raise ValidationError({"action": ["Use confirm or arrive."]})
+        permission, transition = configured
+        scope = _scope(request, permission)
+        try:
+            appointment = transition(
+                appointment_id=appointment_id, organization_id=scope.organization_id,
+                branch_id=scope.branch_id, actor_id=scope.actor_id,
+                expected_version=_version(request.data),
+            )
+        except Appointment.DoesNotExist as exc:
+            raise NotFound("Appointment not found.") from exc
+        except ValueError as exc:
+            return api_error(request, code="appointment_conflict", message=str(exc), status_code=409)
+        return Response(_appointment_json(appointment))
+
+
+class AppointmentRequestView(APIView):
+    def post(self, request):
+        scope = _scope(request, "appointment.request")
+        starts_at = parse_datetime(str(request.data.get("starts_at", "")))
+        ends_at = parse_datetime(str(request.data.get("ends_at", "")))
+        if starts_at is None or ends_at is None:
+            raise ValidationError({"starts_at": ["Timezone-aware ISO 8601 timestamps are required."],
+                                   "ends_at": ["Timezone-aware ISO 8601 timestamps are required."]})
+        if starts_at.utcoffset() is None or ends_at.utcoffset() is None:
+            raise ValidationError({"starts_at": ["Timestamp must include a timezone offset."],
+                                   "ends_at": ["Timestamp must include a timezone offset."]})
+        try:
+            appointment = request_appointment(
+                organization_id=scope.organization_id, branch_id=scope.branch_id,
+                actor_id=scope.actor_id, horse_id=_uuid(request.data.get("horse_id"), "horse_id"),
+                starts_at=starts_at, ends_at=ends_at,
+                practitioner_id=_uuid(request.data["practitioner_id"], "practitioner_id") if request.data.get("practitioner_id") else None,
+                resource_id=_uuid(request.data["resource_id"], "resource_id") if request.data.get("resource_id") else None,
+            )
+        except (Horse.DoesNotExist, Practitioner.DoesNotExist, ScheduleResource.DoesNotExist) as exc:
+            raise NotFound("Horse, practitioner or resource not found in this organization and branch.") from exc
+        except ValueError as exc:
+            return api_error(request, code="appointment_conflict", message=str(exc), status_code=409)
+        return Response(_appointment_json(appointment), status=status.HTTP_201_CREATED)
 
 
 class HealthView(APIView):

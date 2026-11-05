@@ -5,6 +5,7 @@
   let csrfToken = '';
   let connected = false;
   let currentVisitId = '';
+  let currentAppointment = null;
 
   function showStatus(message, kind = '') {
     status.textContent = message;
@@ -66,10 +67,47 @@
       return row;
     }));
     const selector = byId('visit-horse');
+    const appointmentSelector = byId('appointment-horse');
     const selectedId = selector.value;
+    const selectedAppointmentHorseId = appointmentSelector.value;
     selector.replaceChildren(new Option(horses.length ? 'Choose a horse' : 'No horses loaded', ''));
+    appointmentSelector.replaceChildren(new Option(horses.length ? 'Choose a horse' : 'No horses loaded', ''));
     horses.forEach((horse) => selector.add(new Option(`${horse.name}${horse.tamga ? ` · ${horse.tamga}` : ''}`, horse.id)));
+    horses.forEach((horse) => appointmentSelector.add(new Option(`${horse.name}${horse.tamga ? ` · ${horse.tamga}` : ''}`, horse.id)));
     if (horses.some((horse) => horse.id === selectedId)) selector.value = selectedId;
+    if (horses.some((horse) => horse.id === selectedAppointmentHorseId)) appointmentSelector.value = selectedAppointmentHorseId;
+  }
+
+  function renderAppointment(appointment) {
+    currentAppointment = appointment;
+    const target = byId('appointment-records');
+    target.replaceChildren();
+    const card = node('div', 'card');
+    card.style.cssText = 'margin:14px 0 0;background:#f8fafb';
+    card.append(node('strong', '', `${appointment.status} · ${new Date(appointment.starts_at).toLocaleString()} to ${new Date(appointment.ends_at).toLocaleTimeString()}`));
+    card.append(node('p', 'muted', `Appointment ${appointment.id} · version ${appointment.version} · visit created: no · clinical clearance: no`));
+    const action = appointment.status === 'REQUESTED' ? ['confirm', 'Confirm booking']
+      : appointment.status === 'CONFIRMED' ? ['arrive', 'Record arrival'] : null;
+    if (action) {
+      const button = node('button', '', action[1]);
+      button.type = 'button';
+      button.style.marginTop = '8px';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const result = await request(`/api/v1/appointments/${appointment.id}/actions`, {
+            method: 'POST', body: JSON.stringify({ action: action[0], expected_version: appointment.version }),
+          });
+          renderAppointment(result);
+          byId('appointment-status').textContent = action[0] === 'confirm'
+            ? 'Booking confirmed. Physical arrival is still pending.'
+            : 'Physical arrival recorded. A separate visit and clinical review are still required.';
+          showStatus('Appointment updated in the local Clinical API.', 'ok');
+        } catch (error) { showStatus(error.message, 'error'); button.disabled = false; }
+      });
+      card.append(button);
+    }
+    target.append(card);
   }
 
   async function loadHorses() {
@@ -181,6 +219,32 @@
   byId('search').addEventListener('input', () => {
     window.clearTimeout(window.__horseSearchTimer);
     window.__horseSearchTimer = window.setTimeout(loadHorses, 250);
+  });
+  byId('appointment-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!connected) return showStatus('Connect to the local demo session first.', 'error');
+    const horseId = byId('appointment-horse').value;
+    if (!horseId) return showStatus('Select a horse for the appointment.', 'error');
+    const startValue = byId('appointment-start').value;
+    const endValue = byId('appointment-end').value;
+    const payload = {
+      horse_id: horseId,
+      starts_at: new Date(startValue).toISOString(),
+      ends_at: new Date(endValue).toISOString(),
+    };
+    const resourceId = byId('appointment-resource').value.trim();
+    const practitionerId = byId('appointment-practitioner').value.trim();
+    if (!resourceId && !practitionerId) return showStatus('Provide at least a resource or practitioner UUID to reserve the time.', 'error');
+    if (resourceId) payload.resource_id = resourceId;
+    if (practitionerId) payload.practitioner_id = practitionerId;
+    const button = byId('request-appointment'); button.disabled = true;
+    try {
+      const appointment = await request('/api/v1/appointments', { method: 'POST', body: JSON.stringify(payload) });
+      renderAppointment(appointment);
+      byId('appointment-status').textContent = 'Appointment requested. Staff confirmation and physical arrival are separate next steps.';
+      showStatus('Appointment request saved in the local backend.', 'ok');
+    } catch (error) { showStatus(error.message, 'error'); }
+    finally { button.disabled = false; }
   });
   byId('create-visit').addEventListener('click', async () => {
     const horseId = byId('visit-horse').value;

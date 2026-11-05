@@ -176,6 +176,8 @@ def ingest_call24_request(envelope: dict) -> tuple[ReceptionTask, bool]:
         raise ValueError("unsupported Call 24 event type or version")
     if envelope["producer"] != "integrations" or envelope["destination"] != "clinical":
         raise ValueError("Call 24 event producer or destination is invalid")
+    if not isinstance(envelope["aggregate_version"], int) or envelope["aggregate_version"] < 1:
+        raise ValueError("Call 24 aggregate_version must be a positive integer")
     try:
         message_id = UUID(str(envelope["message_id"]))
         organization_id = UUID(str(envelope["organization_id"]))
@@ -224,6 +226,7 @@ def ingest_call24_request(envelope: dict) -> tuple[ReceptionTask, bool]:
             "summary": str(payload.get("summary") or ""),
             "requested_at": _parse_event_time(payload.get("received_at")),
             "source_revision": str(payload.get("source_revision") or "")[:64],
+            "source_aggregate_version": envelope["aggregate_version"],
             "source_time_local": str(payload.get("source_time_local") or "")[:80],
             "source_call_ids": payload.get("source_call_ids") if isinstance(payload.get("source_call_ids"), list) else [],
             "category_labels": payload.get("category_labels") if isinstance(payload.get("category_labels"), list) else [],
@@ -236,6 +239,17 @@ def ingest_call24_request(envelope: dict) -> tuple[ReceptionTask, bool]:
         )
         if not created:
             new_revision = defaults["source_revision"]
+            incoming_version = envelope["aggregate_version"]
+            if incoming_version <= task.source_aggregate_version:
+                AuditEvent.objects.create(
+                    organization_id=organization_id, branch_id=branch_id,
+                    actor_id=None, action="reception.call24_stale_revision_ignored",
+                    aggregate_type="reception_task", aggregate_id=task.id,
+                    aggregate_version=task.version, correlation_id=correlation_id,
+                    details={"incoming_source_version": incoming_version,
+                             "current_source_version": task.source_aggregate_version},
+                )
+                return task, False
             if new_revision and task.source_revision != new_revision:
                 if task.status == ReceptionTask.Status.NEW:
                     for field in ("customer_name", "phone", "summary", "requested_at", "source_time_local",
@@ -243,15 +257,20 @@ def ingest_call24_request(envelope: dict) -> tuple[ReceptionTask, bool]:
                         setattr(task, field, defaults[field])
                 task.source_revision = new_revision
                 task.version += 1
-                task.save(update_fields=["customer_name", "phone", "summary", "requested_at", "source_time_local",
-                                         "source_call_ids", "category_labels", "complaint",
-                                         "source_revision", "version", "updated_at"])
-                ReceptionTaskHistory.objects.create(
-                    organization_id=organization_id, branch_id=branch_id,
-                    task=task, actor_id=None, action="source_revision_received",
-                    from_status=task.status, to_status=task.status,
-                    details={"source_revision": new_revision},
-                )
+                action = "source_revision_received"
+            else:
+                action = "source_version_advanced"
+            task.source_aggregate_version = incoming_version
+            task.save(update_fields=["customer_name", "phone", "summary", "requested_at", "source_time_local",
+                                     "source_call_ids", "category_labels", "complaint",
+                                     "source_revision", "source_aggregate_version", "version", "updated_at"])
+            ReceptionTaskHistory.objects.create(
+                organization_id=organization_id, branch_id=branch_id,
+                task=task, actor_id=None, action=action,
+                from_status=task.status, to_status=task.status,
+                details={"source_revision": task.source_revision,
+                         "source_aggregate_version": incoming_version},
+            )
         if created:
             ReceptionTaskHistory.objects.create(
                 organization_id=organization_id, branch_id=branch_id,

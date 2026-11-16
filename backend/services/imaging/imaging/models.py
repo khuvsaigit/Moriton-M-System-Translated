@@ -1,4 +1,5 @@
 import uuid
+from django.core.validators import RegexValidator
 from django.db import models
 
 class ImagingStudy(models.Model):
@@ -9,6 +10,7 @@ class ImagingStudy(models.Model):
     visit_id = models.UUIDField(null=True, blank=True)
     study_instance_uid = models.CharField(max_length=128)
     modality = models.CharField(max_length=16, blank=True)
+    study_date = models.DateField(null=True, blank=True)
     study_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, default="RECEIVED")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -39,13 +41,90 @@ class ImagingInstance(models.Model):
     source_object_version = models.CharField(max_length=255, blank=True)
     archive_key = models.TextField(blank=True)
     archive_object_version = models.CharField(max_length=255, blank=True)
-    sha256 = models.CharField(max_length=64)
+    sha256 = models.CharField(max_length=64, validators=[RegexValidator(r"^[0-9a-fA-F]{64}$", "Expected a 64-character SHA-256 digest.")])
     byte_length = models.PositiveBigIntegerField()
     scan_status = models.CharField(max_length=32, default="PENDING")
     parsed_metadata = models.JSONField(default=dict, blank=True)
     received_at = models.DateTimeField(auto_now_add=True)
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["series", "sop_instance_uid"], name="imaging_sop_uid_unique")]
+        constraints = [
+            models.UniqueConstraint(fields=["series", "sop_instance_uid"], name="imaging_sop_uid_unique"),
+            models.CheckConstraint(condition=models.Q(byte_length__gt=0), name="imaging_inst_bytes_positive"),
+        ]
+
+
+class ImagingImportJob(models.Model):
+    """Tracks intake/processing state without asserting that source bytes are clean."""
+    class Status(models.TextChoices):
+        RECEIVED = "RECEIVED", "Received"
+        QUARANTINED = "QUARANTINED", "Quarantined"
+        SCANNING = "SCANNING", "Scanning"
+        PROCESSING = "PROCESSING", "Processing"
+        COMPLETED = "COMPLETED", "Completed"
+        FAILED = "FAILED", "Failed"
+        MANUAL_REVIEW = "MANUAL_REVIEW", "Manual review"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    source = models.CharField(max_length=64)
+    received_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.RECEIVED)
+    error_details = models.JSONField(default=dict, blank=True)
+    imported_count = models.PositiveIntegerField(default=0)
+    version = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        indexes = [models.Index(fields=["organization_id", "branch_id", "status", "received_at"], name="imaging_job_scope_status_idx")]
+
+
+class ImagingReport(models.Model):
+    """Immutable report revision; signing/review commands remain policy-gated."""
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        IN_REVIEW = "IN_REVIEW", "In review"
+        REVIEWED = "REVIEWED", "Reviewed"
+        SIGNED = "SIGNED", "Signed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    study = models.ForeignKey(ImagingStudy, on_delete=models.PROTECT, related_name="reports")
+    report_version = models.PositiveIntegerField()
+    author_id = models.UUIDField()
+    report_body = models.TextField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    reviewer_id = models.UUIDField(null=True, blank=True)
+    signed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["study", "report_version"], name="imaging_report_version_unique"),
+            models.CheckConstraint(condition=models.Q(report_version__gt=0), name="imaging_report_ver_positive"),
+        ]
+        indexes = [models.Index(fields=["organization_id", "branch_id", "study", "created_at"], name="imaging_report_scope_study_idx")]
+
+
+class ImagingAnnotation(models.Model):
+    """Immutable annotation revision; geometry is metadata, not an AI inference result."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(db_index=True)
+    branch_id = models.UUIDField(db_index=True)
+    instance = models.ForeignKey(ImagingInstance, on_delete=models.PROTECT, related_name="annotations")
+    annotation_version = models.PositiveIntegerField()
+    annotation_type = models.CharField(max_length=48)
+    geometry = models.JSONField(default=dict)
+    author_id = models.UUIDField()
+    status = models.CharField(max_length=24, default="DRAFT")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["instance", "annotation_version"], name="imaging_anno_ver_unique"),
+            models.CheckConstraint(condition=models.Q(annotation_version__gt=0), name="imaging_anno_ver_positive"),
+        ]
+        indexes = [models.Index(fields=["organization_id", "branch_id", "instance", "created_at"], name="imaging_anno_scope_inst_idx")]
 
 class ImagingAuditEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

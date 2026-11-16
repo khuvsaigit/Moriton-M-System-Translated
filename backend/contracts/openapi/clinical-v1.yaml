@@ -303,8 +303,9 @@ components:
         instructions: {type: string}
     PhysicalIssueCreate:
       type: object
-      required: [quantity, unit]
+      required: [physical_issue_id, quantity, unit]
       properties:
+        physical_issue_id: {type: string, format: uuid, description: Stable business identity reused on exact request retries}
         quantity: {type: string, pattern: '^\\d+(\\.\\d{1,4})?$'}
         unit: {type: string, maxLength: 32}
     AdministrationCreate:

@@ -182,6 +182,7 @@ class PhysicalIssueCreateView(APIView):
             issue = record_physical_issue(
                 line_id=line_id, organization_id=scope.organization_id,
                 branch_id=scope.branch_id, actor_id=scope.actor_id,
+                physical_issue_id=_uuid(request.data.get("physical_issue_id"), "physical_issue_id"),
                 quantity=request.data.get("quantity", ""), unit=str(request.data.get("unit", "")),
             )
         except PrescriptionLine.DoesNotExist as exc:

@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -91,13 +92,25 @@ def verify_prescription(*, prescription_id: UUID, organization_id: UUID, branch_
 
 def record_physical_issue(*, line_id: UUID, organization_id: UUID, branch_id: UUID,
                           actor_id: UUID, quantity: Decimal | str | int, unit: str,
+                          physical_issue_id: UUID | None = None,
                           issued_at: datetime | None = None) -> PhysicalMedicationIssue:
-    """Record only the physical quantity actually handed out, as an immutable issue fact."""
+    """Record an immutable issue fact; a supplied stable ID makes request retries idempotent."""
     amount = _positive_quantity(quantity)
+    normalized_unit = unit.strip()
+    issue_id = physical_issue_id or uuid4()
     timestamp = issued_at or timezone.now()
     if timestamp.tzinfo is None:
         raise ValueError("issue time must include a timezone")
     with scoped_atomic(organization_id, branch_id):
+        existing = PhysicalMedicationIssue.objects.filter(
+            pk=issue_id, organization_id=organization_id, branch_id=branch_id,
+        ).first()
+        if existing is not None:
+            if (existing.prescription_line_id != line_id or existing.quantity != amount
+                    or existing.unit != normalized_unit
+                    or (issued_at is not None and existing.issued_at != issued_at)):
+                raise ValueError("physical issue identity was reused with different values")
+            return existing
         line = PrescriptionLine.objects.get(
             pk=line_id, organization_id=organization_id, branch_id=branch_id,
         )
@@ -109,16 +122,22 @@ def record_physical_issue(*, line_id: UUID, organization_id: UUID, branch_id: UU
         )
         if prescription.status != Prescription.Status.VERIFIED:
             raise ValueError("physical issue requires a verified prescription")
-        if unit.strip() != line.unit:
+        if normalized_unit != line.unit:
             raise ValueError("issue unit must match the prescribed unit; conversions are not configured")
         already_issued = line.physical_issues.aggregate(total=Sum("quantity"))["total"] or Decimal("0")
         if already_issued + amount > line.prescribed_quantity:
             raise ValueError("physical issue exceeds the unissued prescribed quantity")
-        issue = PhysicalMedicationIssue.objects.create(
-            organization_id=organization_id, branch_id=branch_id, created_by=actor_id,
-            prescription_line=line, quantity=amount, unit=line.unit,
-            issued_at=timestamp,
-        )
+        try:
+            # The savepoint converts a collision with an ID from another tenant into a
+            # safe conflict without leaving the surrounding scoped transaction broken.
+            with transaction.atomic():
+                issue = PhysicalMedicationIssue.objects.create(
+                    id=issue_id, organization_id=organization_id, branch_id=branch_id,
+                    created_by=actor_id, prescription_line=line, quantity=amount,
+                    unit=line.unit, issued_at=timestamp,
+                )
+        except IntegrityError as exc:
+            raise ValueError("physical issue identity is already in use") from exc
         AuditEvent.objects.create(
             organization_id=organization_id, branch_id=branch_id, actor_id=actor_id,
             action="pharmacy.physical_issue.recorded", aggregate_type="physical_issue",

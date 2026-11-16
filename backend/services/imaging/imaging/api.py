@@ -29,5 +29,6 @@ class StudyDetailView(APIView):
             return Response({"id": str(study.id), "horse_id": str(study.horse_id),
                              "visit_id": str(study.visit_id) if study.visit_id else None,
                              "study_instance_uid": study.study_instance_uid,
+                             "study_date": study.study_date.isoformat() if study.study_date else None,
                              "modality": study.modality, "status": study.status,
                              "version": study.version})

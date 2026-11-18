@@ -2,6 +2,93 @@ openapi: 3.1.0
 info: {title: Moriton Clinical Operations API, version: 1.0.0}
 servers: [{url: /api/v1}]
 paths:
+  /session:
+    get:
+      operationId: currentSession
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: Current server-verified scope and permissions; membership revalidated per request}, '401': {description: No active session}}
+    delete:
+      operationId: logoutSession
+      security: [{sessionAuth: []}]
+      responses: {'204': {description: Server-side session cleared; CSRF required}}
+  /branches/current:
+    get:
+      operationId: currentBranchProfile
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: Current authorized branch profile or null}}
+    post:
+      operationId: createLocalBranchProfile
+      security: [{sessionAuth: []}]
+      description: Current-branch metadata only, DEBUG and local auth required. Does not grant memberships or create another branch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BranchProfileInput'}
+      responses: {'201': {description: Local current-branch profile recorded}, '403': {description: Production or missing permission}, '409': {description: Profile exists}}
+    patch:
+      operationId: updateLocalBranchProfile
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/BranchProfileInput'}
+                - {$ref: '#/components/schemas/VersionCheck'}
+      responses: {'200': {description: Profile updated with audit}, '403': {description: Local prototype unavailable}, '409': {description: Stale version}}
+  /contacts:
+    get:
+      operationId: searchContacts
+      security: [{sessionAuth: []}]
+      parameters: [{in: query, name: q, schema: {type: string, maxLength: 120}}]
+      responses: {'200': {description: Up to 100 contacts in the authorized branch; shared phone does not identify one contact}}
+    post:
+      operationId: createLocalContact
+      security: [{sessionAuth: []}]
+      description: Local prototype only while master-data ownership and field validation are pending.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ContactInput'}
+      responses: {'201': {description: Contact recorded with audit}, '403': {description: Local prototype unavailable}}
+  /horses/{horse_id}/parties:
+    parameters: [{in: path, name: horse_id, required: true, schema: {type: string, format: uuid}}]
+    get:
+      operationId: listHorseParties
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: 'Up to 100 effective-dated owner, representative and payer records; explicit same-branch access'}}
+    post:
+      operationId: createLocalHorseParty
+      security: [{sessionAuth: []}]
+      description: Local prototype; role does not establish clinical consent authority or financial clearance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PartyInput'}
+      responses: {'201': {description: Effective-dated party role recorded with audit}, '403': {description: Local prototype unavailable}, '404': {description: Horse or contact outside scope}}
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      security: [{sessionAuth: []}]
+      parameters:
+        - {in: query, name: action, schema: {type: string}}
+        - {in: query, name: aggregate_type, schema: {type: string}}
+        - {in: query, name: aggregate_id, schema: {type: string, format: uuid}}
+        - {in: query, name: cursor, schema: {type: string, format: uuid}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses: {'200': {description: 'Append-only audit events ordered by time and UUID, with next_cursor; audit.read required'}, '404': {description: Cursor not found in authorized branch}}
+  /roster:
+    get:
+      operationId: readRoster
+      security: [{sessionAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/WindowStart'}
+        - {$ref: '#/components/parameters/WindowEnd'}
+      responses: {'200': {description: 'Scoped recorded practitioners, shifts, qualifications and resources with explicit limits; no workload score or eligibility inference'}}
   /health/live:
     get:
       operationId: clinicalLiveness
@@ -22,9 +109,17 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/AppointmentAction'}
       responses:
-        '200': {description: Appointment confirmation or physical arrival recorded independently of visit creation and clinical clearance}
+        '200': {description: 'Appointment action recorded independently of visit creation and clearance. Cancel/reschedule require local DEBUG opt-in, a reason and dedicated permission; rescheduling resets confirmation.'}
+        '403': {description: Permission denied or local-only prototype unavailable}
         '409': {description: Invalid transition or stale version}
   /appointments:
+    get:
+      operationId: listAppointments
+      security: [{sessionAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/WindowStart'}
+        - {$ref: '#/components/parameters/WindowEnd'}
+      responses: {'200': {description: Up to 200 scoped appointments overlapping an explicit timezone-aware window of at most 31 days}}
     post:
       operationId: requestAppointment
       security: [{sessionAuth: []}]
@@ -226,7 +321,41 @@ paths:
             schema: {$ref: '#/components/schemas/ChargeSourceCreate'}
       responses: {'201': {description: Stable charge provenance recorded; invoice creation remains policy-gated}, '400': {description: Validation error}, '403': {description: Permission denied}}
 components:
+  parameters:
+    WindowStart:
+      in: query
+      name: starts_at
+      required: true
+      schema: {type: string, format: date-time}
+      description: Explicit timezone offset required.
+    WindowEnd:
+      in: query
+      name: ends_at
+      required: true
+      schema: {type: string, format: date-time}
+      description: Later than starts_at; read window at most 31 days.
   schemas:
+    BranchProfileInput:
+      type: object
+      required: [display_name, code]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 160}
+        code: {type: string, minLength: 1, maxLength: 32}
+    ContactInput:
+      type: object
+      required: [display_name]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 200}
+        phone: {type: string, maxLength: 32}
+        email: {type: string, maxLength: 254}
+    PartyInput:
+      type: object
+      required: [contact_id, role, valid_from]
+      properties:
+        contact_id: {type: string, format: uuid}
+        role: {type: string, enum: [owner, representative, payer]}
+        valid_from: {type: string, format: date-time}
+        valid_to: {type: [string, 'null'], format: date-time}
     HorseCreate:
       type: object
       required: [name]
@@ -338,8 +467,11 @@ components:
       type: object
       required: [action, expected_version]
       properties:
-        action: {type: string, enum: [confirm, arrive]}
+        action: {type: string, enum: [confirm, arrive, cancel, reschedule]}
         expected_version: {type: integer, minimum: 1}
+        reason: {type: string, minLength: 1, maxLength: 1000, description: Required for local cancel/reschedule actions}
+        starts_at: {type: string, format: date-time, description: Required for local reschedule}
+        ends_at: {type: string, format: date-time, description: Required for local reschedule}
     AppointmentRequest:
       type: object
       required: [horse_id, starts_at, ends_at]

@@ -12,6 +12,41 @@ The Clinical service has a provider-neutral server-side session bridge. Mock log
 
 ### Local frontend-to-backend demo
 
+The R1–R3 local workbench is at `http://localhost:5500/backend-workbench.html`.
+It adds permission-based navigation, current-session/logout, current-branch profile
+metadata, contacts and effective-dated owner/representative/payer records, manual
+reception/link/visit actions, audit-history search/pagination, roster reads, and
+appointment request/confirm/arrival/cancel/reschedule. A link is also present in
+the dashboard's opted-in backend demo panel. It uses the local Clinical API only.
+
+For a synthetic workbench identity, set `LOCAL_AUTH_PERMISSIONS` in the untracked
+local environment to the actions that identity should exercise, for example:
+
+```dotenv
+LOCAL_AUTH_PERMISSIONS=branch.read,branch.manage,registry.read,registry.create,contact.read,contact.create,party.create,reception.read,reception.create,reception.link,visit.create,appointment.read,appointment.request,appointment.confirm,appointment.arrive,appointment.cancel,appointment.reschedule,roster.read,audit.read,demo.resource.create
+```
+
+Run migrations before opening the workbench. New branch profiles are labels for
+the session's existing branch; they do not grant membership, switch scope or
+create a new operational branch. Branch-profile, contact, party and appointment
+cancel/reschedule writes require both `DEBUG=1` and explicit local auth opt-in;
+they are unavailable in staging/production while client rules are pending.
+Rescheduling the local prototype clears confirmation and returns it to
+`REQUESTED`; the client must approve the production transition policy. Registry
+numbering, microchip enforcement, master-data ownership, merges, consent rules,
+qualification enforcement and workload calculations are not finalized here.
+The workbench supplies no CSV import UI or live Messenger/Call24 connection.
+Raw audit API access requires `audit.read` in the current organization/branch.
+Cryptographic service assertion verification remains gated by the approved
+algorithm/key/rotation ADR; no production trust scheme was enabled.
+
+Lightweight verification:
+
+```sh
+DATABASE_URL=sqlite:////tmp/moriton-local-tests.sqlite3 backend/.venv/bin/python backend/services/clinical/manage.py test registry --noinput
+node backend/tests/test_workbench.mjs
+```
+
 The legacy `index.html` application continues to use Firebase for its existing screens. An opt-in panel in the main dashboard now exercises the appointment API against localhost only; it creates synthetic horse and room records in the local Clinical database and does not read or write Firebase records. Open the dashboard with `?backendDemo=1` to reveal the panel. The standalone `backend-preview.html` remains available for registry, visit and pharmacy demonstrations.
 
 Set these values in the untracked `backend/.env` file for a throwaway local identity:

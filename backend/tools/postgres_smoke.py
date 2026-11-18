@@ -16,6 +16,7 @@ CONNECTIONS = {
 DATABASES = {"clinical": "clinical_db", "integrations": "integration_db", "imaging": "imaging_db"}
 SCOPED_TABLES = {
     "clinical": ["registry_horse", "registry_horseidentifier", "registry_contact", "registry_horsepartyrole",
+                 "registry_branchprofile",
                  "registry_receptiontask", "registry_auditevent", "registry_outboxevent", "registry_inboxreceipt",
                  "registry_servicemembership", "registry_registereddevice", "registry_fieldaccessgrant",
                  "registry_branchvisitsequence", "registry_clinicalnote", "registry_clinicalnoterevision",

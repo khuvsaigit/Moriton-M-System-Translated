@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Moriton local workflow workbench</title>
+  <style>
+    :root{font:16px system-ui,sans-serif;color:#183342;background:#f2f5f7}body{margin:0}header,main{max-width:1120px;margin:auto;padding:24px}header{padding-bottom:8px}h1{font-size:28px;margin:0 0 8px}h2{font-size:21px}h3{font-size:17px}p{line-height:1.5}.muted{color:#526975}.notice{padding:12px 16px;background:#fff4d6;border-left:4px solid #a76a00}nav{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}nav a,button{background:#174d60;color:white;padding:9px 14px;border:0;border-radius:5px;text-decoration:none;cursor:pointer}button:disabled{opacity:.5;cursor:default}section{background:white;border:1px solid #dbe3e8;border-radius:8px;padding:20px;margin-bottom:20px;scroll-margin-top:12px}form,.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:16px 0}label{display:flex;flex-direction:column;gap:5px;font-size:14px;flex:1;min-width:160px}input,select,textarea{padding:9px;border:1px solid #8aa0ad;border-radius:4px;font:inherit;max-width:100%;box-sizing:border-box}textarea{min-height:72px}.wide{flex-basis:100%}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;text-align:left;vertical-align:top;border-bottom:1px solid #dbe3e8;overflow-wrap:anywhere}th{background:#edf3f6}.scroll{overflow:auto}.actions{display:flex;gap:6px;flex-wrap:wrap}.actions button{padding:6px 10px;font-size:13px}#status{min-height:24px;white-space:pre-wrap}#status.error{color:#9c2020}#status.ok{color:#24613d}code{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}[hidden]{display:none!important}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media(max-width:760px){.grid{grid-template-columns:1fr}header,main{padding:16px}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Moriton workflow workbench</h1>
+  <p class="notice">Local development demonstration. Use synthetic records. This page uses the new Clinical backend and does not connect to Firebase, Call24 Messenger or Odoo.</p>
+  <div class="controls"><label>Local Clinical API<input id="api-base" value="http://localhost:8001" autocomplete="off"></label><button id="connect">Connect local session</button><button id="logout" disabled>Sign out</button></div>
+  <p id="identity" class="muted">Connect to load your permitted workflows.</p>
+  <p id="status" role="status" aria-live="polite"></p>
+  <nav id="menus" aria-label="Permitted workflows"></nav>
+</header>
+<main>
+  <section id="branch" hidden>
+    <h2>Current branch</h2><p class="muted">This profile labels the branch already authorized by your session. It does not create another branch or grant access.</p>
+    <p id="branch-record"></p>
+    <form id="branch-form"><label>Branch name<input name="display_name" required maxlength="160"></label><label>Branch code<input name="code" required maxlength="32"></label><button>Save profile</button></form>
+  </section>
+  <section id="intake" hidden>
+    <h2>Registration and manual reception</h2>
+    <p class="muted">Owner, representative and payer remain distinct records. Similar names or shared phone numbers require staff review. Microchip policy and final numbering remain client decisions.</p>
+    <div class="grid">
+      <div><h3>Horse records</h3><form id="horse-form"><label>Horse description/name<input name="name" required maxlength="160"></label><label>Brand/tamga<input name="tamga" maxlength="120"></label><button>Create horse</button></form><div id="horses"></div></div>
+      <div><h3>Contacts</h3><form id="contact-form"><label>Contact name<input name="display_name" required maxlength="200"></label><label>Phone<input name="phone" maxlength="32"></label><label>Email<input name="email" type="email"></label><button>Create contact</button></form><div id="contacts"></div></div>
+    </div>
+    <h3>Record a party role</h3>
+    <form id="party-form"><label>Horse<select name="horse_id" data-horses required></select></label><label>Contact<select id="party-contact" name="contact_id" required></select></label><label>Role<select name="role"><option value="owner">Owner</option><option value="representative">Representative</option><option value="payer">Payer</option></select></label><label>Effective from<input name="valid_from" type="datetime-local" required></label><button>Record role</button></form>
+    <button id="load-parties">View selected horse's party history</button><div id="parties"></div>
+    <h3>Manual enquiry</h3><p class="muted">For staff-entered enquiries, including information received through Messenger. No automated Messenger connection is implied.</p>
+    <form id="reception-form"><label>Caller name<input name="customer_name" maxlength="200"></label><label>Phone<input name="phone" maxlength="32"></label><label class="wide">Enquiry summary<textarea name="summary" required></textarea></label><button>Save manual enquiry</button></form>
+    <label>Horse confirmed by staff for the selected enquiry<select id="reception-horse" data-horses></select></label>
+    <div id="reception"></div><p id="visit-result" role="status"></p>
+  </section>
+  <section id="appointments" hidden>
+    <h2>Appointments and roster</h2>
+    <p class="muted">Read a maximum 31-day window. Local rescheduling requires a reason and returns the booking to Requested for fresh confirmation. Client booking, qualification and workload rules are still pending.</p>
+    <form id="window-form"><label>Window start<input id="window-start" type="datetime-local" required></label><label>Window end<input id="window-end" type="datetime-local" required></label><button>Refresh schedule</button></form>
+    <form id="resource-form"><label>Synthetic room name<input name="name" required maxlength="160"></label><button>Create local room</button></form>
+    <form id="appointment-form"><label>Horse<select name="horse_id" data-horses required></select></label><label>Room/resource<select id="appointment-resource" name="resource_id" required></select></label><label>Start<input name="starts_at" type="datetime-local" required></label><label>End<input name="ends_at" type="datetime-local" required></label><button>Request appointment</button></form>
+    <div class="controls"><label>Change/cancellation reason<input id="change-reason" maxlength="1000"></label><label>New start for rescheduling<input id="new-start" type="datetime-local"></label><label>New end for rescheduling<input id="new-end" type="datetime-local"></label></div>
+    <div id="appointment-records"></div>
+    <h3>Roster and qualification records</h3><p class="muted">Recorded shifts and qualifications only. No workload score or clinical eligibility decision is inferred.</p><div id="roster-records"></div>
+  </section>
+  <section id="audit" hidden>
+    <h2>Audit history</h2>
+    <form id="audit-form"><label>Action (optional)<input name="action" placeholder="appointment.rescheduled"></label><label>Record type (optional)<input name="aggregate_type" placeholder="horse"></label><label>Record UUID (optional)<input name="aggregate_id"></label><button>Search history</button></form><div id="audit-records"></div><button id="audit-next" hidden>Next page</button>
+  </section>
+</main>
+<script type="module" src="backend-workbench.mjs"></script>
+</body>
+</html>

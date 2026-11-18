@@ -165,7 +165,7 @@ def mark_appointment_arrived(*, appointment_id: UUID, organization_id: UUID, bra
 
 
 def cancel_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,
-                       actor_id: UUID, expected_version: int) -> Appointment:
+                       actor_id: UUID, expected_version: int, reason: str = "") -> Appointment:
     with scoped_atomic(organization_id, branch_id):
         appointment = Appointment.objects.select_for_update().get(
             pk=appointment_id, organization_id=organization_id, branch_id=branch_id,
@@ -183,6 +183,69 @@ def cancel_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id
             action="appointment.cancelled", aggregate_type="appointment",
             aggregate_id=appointment.id, aggregate_version=appointment.version,
             correlation_id=appointment.id,
-            details={"previous_status": old_status, "expected_version": expected_version},
+            details={"previous_status": old_status, "expected_version": expected_version,
+                     "reason": reason},
+        )
+        return appointment
+
+
+def reschedule_appointment(*, appointment_id: UUID, organization_id: UUID, branch_id: UUID,
+                           actor_id: UUID, expected_version: int, starts_at: datetime,
+                           ends_at: datetime, reason: str) -> Appointment:
+    """Local policy-neutral prototype. A changed booking requires fresh confirmation.
+
+    The HTTP adapter keeps this disabled outside the opted-in local environment
+    until the client's booking rules have been approved.
+    """
+    _check_window(starts_at, ends_at)
+    if not reason.strip():
+        raise ValueError("a rescheduling reason is required")
+    with scoped_atomic(organization_id, branch_id):
+        appointment = Appointment.objects.select_for_update().get(
+            pk=appointment_id, organization_id=organization_id, branch_id=branch_id,
+        )
+        if appointment.version != expected_version:
+            raise ValueError("appointment version conflict")
+        if appointment.status not in {Appointment.Status.REQUESTED, Appointment.Status.CONFIRMED}:
+            raise ValueError("only requested or confirmed appointments can be rescheduled")
+        # Match the resource -> practitioner lock order used by request_appointment.
+        if appointment.resource_id:
+            ScheduleResource.objects.select_for_update().get(
+                pk=appointment.resource_id, organization_id=organization_id,
+                branch_id=branch_id, active=True,
+            )
+        if appointment.practitioner_id:
+            Practitioner.objects.select_for_update().get(
+                pk=appointment.practitioner_id, organization_id=organization_id,
+                branch_id=branch_id, active=True,
+            )
+        resources = Q(pk__in=[])
+        if appointment.resource_id:
+            resources |= Q(resource_id=appointment.resource_id)
+        if appointment.practitioner_id:
+            resources |= Q(practitioner_id=appointment.practitioner_id)
+        conflicts = Appointment.objects.filter(
+            organization_id=organization_id, branch_id=branch_id,
+            status__in=[Appointment.Status.REQUESTED, Appointment.Status.CONFIRMED, Appointment.Status.ARRIVED],
+            starts_at__lt=ends_at, ends_at__gt=starts_at,
+        ).exclude(pk=appointment.id).filter(resources)
+        if conflicts.exists():
+            raise ValueError("appointment conflicts with an existing reservation")
+        if (appointment.starts_at, appointment.ends_at) == (starts_at, ends_at):
+            return appointment
+        before = {"starts_at": appointment.starts_at.isoformat(),
+                  "ends_at": appointment.ends_at.isoformat(), "status": appointment.status}
+        appointment.starts_at, appointment.ends_at = starts_at, ends_at
+        appointment.status = Appointment.Status.REQUESTED
+        appointment.confirmed_at = appointment.confirmed_by = None
+        appointment.version += 1
+        appointment.save(update_fields=["starts_at", "ends_at", "status", "confirmed_at",
+                                        "confirmed_by", "version", "updated_at"])
+        AuditEvent.objects.create(
+            organization_id=organization_id, branch_id=branch_id, actor_id=actor_id,
+            action="appointment.rescheduled", aggregate_type="appointment", aggregate_id=appointment.id,
+            aggregate_version=appointment.version, correlation_id=appointment.id,
+            details={"before": before, "starts_at": starts_at.isoformat(), "ends_at": ends_at.isoformat(),
+                     "reason": reason.strip(), "confirmation_required": True},
         )
         return appointment

@@ -2,9 +2,9 @@ name: Backend quality
 
 on:
   push:
-    paths: ["backend/**", "pyproject.toml", ".github/workflows/backend-quality.yml"]
+    paths: ["backend/**", "backend-workbench.*", "pyproject.toml", ".github/workflows/backend-quality.yml"]
   pull_request:
-    paths: ["backend/**", "pyproject.toml", ".github/workflows/backend-quality.yml"]
+    paths: ["backend/**", "backend-workbench.*", "pyproject.toml", ".github/workflows/backend-quality.yml"]
 
 permissions:
   contents: read
@@ -26,6 +26,10 @@ jobs:
       - run: python -m pip_audit -r backend/requirements/dev.txt
       - run: python backend/tools/secret_scan.py
       - run: python backend/tools/check_contracts.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node backend/tests/test_workbench.mjs
       - name: Terraform plan policy tests
         run: PYTHONPATH=backend python -m unittest backend.tests.test_terraform_plan_policy
       - name: Service checks and migrations

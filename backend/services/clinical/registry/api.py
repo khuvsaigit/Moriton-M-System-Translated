@@ -21,7 +21,10 @@ from .pharmacy import (
     record_correction_intent, record_physical_issue, verify_prescription,
 )
 from .security import authorize, scoped_atomic
-from .scheduling import confirm_appointment, mark_appointment_arrived, request_appointment
+from .scheduling import (
+    cancel_appointment, confirm_appointment, mark_appointment_arrived,
+    request_appointment, reschedule_appointment,
+)
 from .workflows import (
     DomainConflict,
     DuplicateIdentity,
@@ -57,11 +60,8 @@ def _uuid(value, field: str) -> UUID:
 
 
 def _version(data) -> int:
-    try:
-        value = int(data.get("expected_version"))
-    except (TypeError, ValueError) as exc:
-        raise ValidationError({"expected_version": ["A positive integer is required."]}) from exc
-    if value < 1:
+    value = data.get("expected_version")
+    if type(value) is not int or value < 1:
         raise ValidationError({"expected_version": ["A positive integer is required."]})
     return value
 
@@ -264,6 +264,8 @@ def _appointment_json(appointment: Appointment) -> dict:
     return {"id": str(appointment.id), "horse_id": str(appointment.horse_id),
             "visit_id": str(appointment.visit_id) if appointment.visit_id else None,
             "status": appointment.status, "starts_at": appointment.starts_at.isoformat(),
+            "practitioner_id": str(appointment.practitioner_id) if appointment.practitioner_id else None,
+            "resource_id": str(appointment.resource_id) if appointment.resource_id else None,
             "ends_at": appointment.ends_at.isoformat(),
             "confirmed_at": appointment.confirmed_at.isoformat() if appointment.confirmed_at else None,
             "confirmed_by": str(appointment.confirmed_by) if appointment.confirmed_by else None,
@@ -279,9 +281,28 @@ class AppointmentActionView(APIView):
 
     def post(self, request, appointment_id):
         action = str(request.data.get("action", ""))
+        if action in {"cancel", "reschedule"}:
+            from rest_framework import serializers
+            from .release_api import read_window, require_local_prototype
+            scope = _scope(request, "appointment." + action)
+            require_local_prototype()
+            reason = serializers.CharField(max_length=1000).run_validation(request.data.get("reason"))
+            try:
+                args = {"appointment_id": appointment_id, "organization_id": scope.organization_id,
+                        "branch_id": scope.branch_id, "actor_id": scope.actor_id,
+                        "expected_version": _version(request.data), "reason": reason}
+                if action == "reschedule":
+                    appointment = reschedule_appointment(**args, **read_window(request.data))
+                else:
+                    appointment = cancel_appointment(**args)
+            except (Appointment.DoesNotExist, Practitioner.DoesNotExist, ScheduleResource.DoesNotExist) as exc:
+                raise NotFound("Appointment or active resource not found in this branch.") from exc
+            except ValueError as exc:
+                return api_error(request, code="appointment_conflict", message=str(exc), status_code=409)
+            return Response(_appointment_json(appointment))
         configured = self.actions.get(action)
         if configured is None:
-            raise ValidationError({"action": ["Use confirm or arrive."]})
+            raise ValidationError({"action": ["Use confirm or arrive; cancel/reschedule are local prototypes only."]})
         permission, transition = configured
         scope = _scope(request, permission)
         try:
@@ -298,6 +319,10 @@ class AppointmentActionView(APIView):
 
 
 class AppointmentRequestView(APIView):
+    def get(self, request):
+        from .release_api import AppointmentListView
+        return AppointmentListView().get(request)
+
     def post(self, request):
         scope = _scope(request, "appointment.request")
         starts_at = parse_datetime(str(request.data.get("starts_at", "")))

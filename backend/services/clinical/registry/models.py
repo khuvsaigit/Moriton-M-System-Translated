@@ -18,6 +18,17 @@ class Contact(ScopedRecord):
     normalized_phone = models.CharField(max_length=32, blank=True, db_index=True)
     email = models.EmailField(blank=True)
 
+
+class BranchProfile(ScopedRecord):
+    """Metadata for the current authorized branch; never grants branch access."""
+    display_name = models.CharField(max_length=160)
+    code = models.CharField(max_length=32)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=["organization_id", "branch_id"], name="branch_profile_scope_unique",
+        )]
+
 class Horse(ScopedRecord):
     name = models.CharField(max_length=160)
     breed = models.CharField(max_length=120, blank=True)

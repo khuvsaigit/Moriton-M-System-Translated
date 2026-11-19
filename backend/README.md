@@ -13,6 +13,10 @@ The Clinical service has a provider-neutral server-side session bridge. Mock log
 ### Local frontend-to-backend demo
 
 The R1–R3 local workbench is at `http://localhost:5500/backend-workbench.html`.
+It now follows the legacy app's navy/gold shell, responsive sidebar/mobile
+navigation, page headings, cards, forms, tables and button styles by loading
+`style.css`. It remains a separate entry point and uses its own short-lived
+server session; it does not embed the Firebase login or Firebase data layer.
 It adds permission-based navigation, current-session/logout, current-branch profile
 metadata, contacts and effective-dated owner/representative/payer records, manual
 reception/link/visit actions, audit-history search/pagination, roster reads, and

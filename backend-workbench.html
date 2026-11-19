@@ -1,57 +1,164 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Moriton local workflow workbench</title>
-  <style>
-    :root{font:16px system-ui,sans-serif;color:#183342;background:#f2f5f7}body{margin:0}header,main{max-width:1120px;margin:auto;padding:24px}header{padding-bottom:8px}h1{font-size:28px;margin:0 0 8px}h2{font-size:21px}h3{font-size:17px}p{line-height:1.5}.muted{color:#526975}.notice{padding:12px 16px;background:#fff4d6;border-left:4px solid #a76a00}nav{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}nav a,button{background:#174d60;color:white;padding:9px 14px;border:0;border-radius:5px;text-decoration:none;cursor:pointer}button:disabled{opacity:.5;cursor:default}section{background:white;border:1px solid #dbe3e8;border-radius:8px;padding:20px;margin-bottom:20px;scroll-margin-top:12px}form,.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:16px 0}label{display:flex;flex-direction:column;gap:5px;font-size:14px;flex:1;min-width:160px}input,select,textarea{padding:9px;border:1px solid #8aa0ad;border-radius:4px;font:inherit;max-width:100%;box-sizing:border-box}textarea{min-height:72px}.wide{flex-basis:100%}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;text-align:left;vertical-align:top;border-bottom:1px solid #dbe3e8;overflow-wrap:anywhere}th{background:#edf3f6}.scroll{overflow:auto}.actions{display:flex;gap:6px;flex-wrap:wrap}.actions button{padding:6px 10px;font-size:13px}#status{min-height:24px;white-space:pre-wrap}#status.error{color:#9c2020}#status.ok{color:#24613d}code{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}[hidden]{display:none!important}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media(max-width:760px){.grid{grid-template-columns:1fr}header,main{padding:16px}}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#022438">
+  <title>Moriton · P1 local workbench</title>
+  <link rel="stylesheet" href="style.css?v=20261023">
+  <link rel="stylesheet" href="backend-workbench.css?v=20261119">
 </head>
-<body>
-<header>
-  <h1>Moriton workflow workbench</h1>
-  <p class="notice">Local development demonstration. Use synthetic records. This page uses the new Clinical backend and does not connect to Firebase, Call24 Messenger or Odoo.</p>
-  <div class="controls"><label>Local Clinical API<input id="api-base" value="http://localhost:8001" autocomplete="off"></label><button id="connect">Connect local session</button><button id="logout" disabled>Sign out</button></div>
-  <p id="identity" class="muted">Connect to load your permitted workflows.</p>
-  <p id="status" role="status" aria-live="polite"></p>
-  <nav id="menus" aria-label="Permitted workflows"></nav>
-</header>
-<main>
-  <section id="branch" hidden>
-    <h2>Current branch</h2><p class="muted">This profile labels the branch already authorized by your session. It does not create another branch or grant access.</p>
-    <p id="branch-record"></p>
-    <form id="branch-form"><label>Branch name<input name="display_name" required maxlength="160"></label><label>Branch code<input name="code" required maxlength="32"></label><button>Save profile</button></form>
-  </section>
-  <section id="intake" hidden>
-    <h2>Registration and manual reception</h2>
-    <p class="muted">Owner, representative and payer remain distinct records. Similar names or shared phone numbers require staff review. Microchip policy and final numbering remain client decisions.</p>
-    <div class="grid">
-      <div><h3>Horse records</h3><form id="horse-form"><label>Horse description/name<input name="name" required maxlength="160"></label><label>Brand/tamga<input name="tamga" maxlength="120"></label><button>Create horse</button></form><div id="horses"></div></div>
-      <div><h3>Contacts</h3><form id="contact-form"><label>Contact name<input name="display_name" required maxlength="200"></label><label>Phone<input name="phone" maxlength="32"></label><label>Email<input name="email" type="email"></label><button>Create contact</button></form><div id="contacts"></div></div>
+<body class="wb-shell">
+<div id="app">
+  <header class="hdr">
+    <div class="logo" aria-hidden="true"></div>
+    <div class="brand">
+      <div class="brand-name">Морьтон Адууны Төв</div>
+      <div class="brand-sub">P1 · Local R1–R3 workbench</div>
     </div>
-    <h3>Record a party role</h3>
-    <form id="party-form"><label>Horse<select name="horse_id" data-horses required></select></label><label>Contact<select id="party-contact" name="contact_id" required></select></label><label>Role<select name="role"><option value="owner">Owner</option><option value="representative">Representative</option><option value="payer">Payer</option></select></label><label>Effective from<input name="valid_from" type="datetime-local" required></label><button>Record role</button></form>
-    <button id="load-parties">View selected horse's party history</button><div id="parties"></div>
-    <h3>Manual enquiry</h3><p class="muted">For staff-entered enquiries, including information received through Messenger. No automated Messenger connection is implied.</p>
-    <form id="reception-form"><label>Caller name<input name="customer_name" maxlength="200"></label><label>Phone<input name="phone" maxlength="32"></label><label class="wide">Enquiry summary<textarea name="summary" required></textarea></label><button>Save manual enquiry</button></form>
-    <label>Horse confirmed by staff for the selected enquiry<select id="reception-horse" data-horses></select></label>
-    <div id="reception"></div><p id="visit-result" role="status"></p>
-  </section>
-  <section id="appointments" hidden>
-    <h2>Appointments and roster</h2>
-    <p class="muted">Read a maximum 31-day window. Local rescheduling requires a reason and returns the booking to Requested for fresh confirmation. Client booking, qualification and workload rules are still pending.</p>
-    <form id="window-form"><label>Window start<input id="window-start" type="datetime-local" required></label><label>Window end<input id="window-end" type="datetime-local" required></label><button>Refresh schedule</button></form>
-    <form id="resource-form"><label>Synthetic room name<input name="name" required maxlength="160"></label><button>Create local room</button></form>
-    <form id="appointment-form"><label>Horse<select name="horse_id" data-horses required></select></label><label>Room/resource<select id="appointment-resource" name="resource_id" required></select></label><label>Start<input name="starts_at" type="datetime-local" required></label><label>End<input name="ends_at" type="datetime-local" required></label><button>Request appointment</button></form>
-    <div class="controls"><label>Change/cancellation reason<input id="change-reason" maxlength="1000"></label><label>New start for rescheduling<input id="new-start" type="datetime-local"></label><label>New end for rescheduling<input id="new-end" type="datetime-local"></label></div>
-    <div id="appointment-records"></div>
-    <h3>Roster and qualification records</h3><p class="muted">Recorded shifts and qualifications only. No workload score or clinical eligibility decision is inferred.</p><div id="roster-records"></div>
-  </section>
-  <section id="audit" hidden>
-    <h2>Audit history</h2>
-    <form id="audit-form"><label>Action (optional)<input name="action" placeholder="appointment.rescheduled"></label><label>Record type (optional)<input name="aggregate_type" placeholder="horse"></label><label>Record UUID (optional)<input name="aggregate_id"></label><button>Search history</button></form><div id="audit-records"></div><button id="audit-next" hidden>Next page</button>
-  </section>
-</main>
+    <div class="wb-header-session" id="identity">No active local session.</div>
+    <span class="wb-local-pill"><span aria-hidden="true">●</span> LOCAL ONLY</span>
+    <button class="hdr-logout" id="logout" disabled type="button">
+      <span class="hdr-logout-em" aria-hidden="true">↪</span><span class="hdr-logout-tx">Sign out</span>
+    </button>
+  </header>
+
+  <div class="body">
+    <aside class="sb wb-sidebar" aria-label="P1 workflows">
+      <div class="sb-section">P1 delivery</div>
+      <nav class="sb-list" id="menus" aria-label="Permitted workflows"></nav>
+      <div class="sb-bottom wb-sidebar-note">
+        <div class="wb-note-title">Development workbench</div>
+        <div>Server permissions control which workflows and actions are available.</div>
+      </div>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="wb-page page active" id="workbench-home">
+        <div class="ph"><div class="ph-l"><div class="ph-title">P1 local workflow workbench</div>
+          <div class="ph-sub">Connect to the opted-in local Clinical API to show workflows allowed by the server.</div></div></div>
+        <div class="card wb-warning">
+          <div class="ch">Synthetic data only</div>
+          <p>This development workbench uses the new Clinical API. It does not connect to Firebase, Call24 Messenger or Odoo. Do not enter client or patient data.</p>
+        </div>
+        <div class="card wb-connect-card" id="connect-card">
+          <div class="ch">Local API connection</div>
+          <div class="fg r2 wb-connect-fields">
+            <div class="fld"><label for="api-base">Local Clinical API origin</label>
+              <input class="inp" id="api-base" value="http://localhost:8001" autocomplete="off" spellcheck="false"></div>
+            <div class="fld wb-connect-action"><label>&nbsp;</label>
+              <button class="btn btn-p" id="connect" type="button">Connect local session</button></div>
+          </div>
+          <p class="muted">The local session is short-lived. The server supplies the identity, branch scope and permissions.</p>
+        </div>
+      </div>
+
+      <div id="status" class="wb-status" role="status" aria-live="polite"></div>
+
+      <section class="page wb-page" id="branch" hidden>
+        <div class="ph"><div class="ph-l"><div class="ph-title">Current branch</div>
+          <div class="ph-sub">Profile metadata for the branch already authorized by your session.</div></div></div>
+        <div class="card"><div class="ch">Branch profile</div>
+          <p class="muted">This profile does not create another operational branch, grant membership or change your branch scope.</p>
+          <p id="branch-record" class="wb-record-summary"></p>
+          <form id="branch-form" class="fg r2 wb-form"><div class="fld"><label>Branch name</label><input class="inp" name="display_name" required maxlength="160"></div>
+            <div class="fld"><label>Branch code</label><input class="inp" name="code" required maxlength="32"></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Save profile</button></div></form>
+        </div>
+      </section>
+
+      <section class="page wb-page" id="intake" hidden>
+        <div class="ph"><div class="ph-l"><div class="ph-title">Horse registration and reception</div>
+          <div class="ph-sub">Create synthetic horse and contact records, record party roles, and handle a manually received enquiry.</div></div></div>
+        <div class="card wb-warning"><div class="ch">Identity and intake rules</div>
+          <p>Owner, representative and payer are separate roles. Similar names or shared phone numbers require staff review. Microchip and final registration numbering rules remain pending client approval.</p></div>
+        <div class="wb-grid">
+          <div class="card"><div class="ch">Horse records</div>
+            <form id="horse-form" class="fg wb-form"><div class="fld"><label>Horse description or name</label><input class="inp" name="name" required maxlength="160"></div>
+              <div class="fld"><label>Brand / tamga</label><input class="inp" name="tamga" maxlength="120"></div>
+              <div class="wb-form-actions"><button class="btn btn-p" type="submit">Create horse</button></div></form>
+            <div id="horses" class="wb-table-wrap"></div>
+          </div>
+          <div class="card"><div class="ch">Contacts</div>
+            <form id="contact-form" class="fg wb-form"><div class="fld"><label>Contact name</label><input class="inp" name="display_name" required maxlength="200"></div>
+              <div class="fld"><label>Phone</label><input class="inp" name="phone" maxlength="32"></div>
+              <div class="fld"><label>Email</label><input class="inp" name="email" type="email"></div>
+              <div class="wb-form-actions"><button class="btn btn-p" type="submit">Create contact</button></div></form>
+            <div id="contacts" class="wb-table-wrap"></div>
+          </div>
+        </div>
+        <div class="card"><div class="ch">Owner, representative or payer</div>
+          <p class="muted">Party roles are effective-dated. This workbench does not infer a match from a phone number.</p>
+          <form id="party-form" class="fg r2 wb-form"><div class="fld"><label>Horse</label><select class="inp" name="horse_id" data-horses required></select></div>
+            <div class="fld"><label>Contact</label><select class="inp" id="party-contact" name="contact_id" required></select></div>
+            <div class="fld"><label>Role</label><select class="inp" name="role"><option value="owner">Owner</option><option value="representative">Representative</option><option value="payer">Payer</option></select></div>
+            <div class="fld"><label>Effective from</label><input class="inp" name="valid_from" type="datetime-local" required></div>
+            <div class="wb-form-actions wb-inline-actions"><button class="btn btn-p" type="submit">Record role</button>
+              <button class="btn" id="load-parties" type="button">View party history</button></div></form>
+          <div id="parties" class="wb-table-wrap"></div>
+        </div>
+        <div class="card"><div class="ch">Manual reception enquiry</div>
+          <p class="muted">For staff-entered enquiries, including information received through Messenger. This is not an automated Messenger connection.</p>
+          <form id="reception-form" class="fg r2 wb-form"><div class="fld"><label>Caller name</label><input class="inp" name="customer_name" maxlength="200"></div>
+            <div class="fld"><label>Phone</label><input class="inp" name="phone" maxlength="32"></div>
+            <div class="fld wb-span-all"><label>Enquiry summary</label><textarea class="inp" name="summary" required></textarea></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Save manual enquiry</button></div></form>
+          <div class="fld wb-horse-link"><label>Horse confirmed by staff for the selected enquiry</label><select class="inp" id="reception-horse" data-horses></select></div>
+          <div id="reception" class="wb-table-wrap"></div><p id="visit-result" class="wb-result" role="status"></p>
+        </div>
+      </section>
+
+      <section class="page wb-page" id="appointments" hidden>
+        <div class="ph"><div class="ph-l"><div class="ph-title">Appointments and roster</div>
+          <div class="ph-sub">Review the schedule, appointment state, practitioner qualifications and recorded shifts.</div></div></div>
+        <div class="card wb-warning"><div class="ch">Prototype behavior</div>
+          <p>Read windows are limited to 31 days. Local rescheduling requires a reason and returns the appointment to Requested for fresh confirmation. Client booking, qualification and workload rules remain pending.</p></div>
+        <div class="card"><div class="ch">Schedule window</div>
+          <form id="window-form" class="fg r2 wb-form"><div class="fld"><label>Window start</label><input class="inp" id="window-start" type="datetime-local" required></div>
+            <div class="fld"><label>Window end</label><input class="inp" id="window-end" type="datetime-local" required></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Refresh schedule</button></div></form>
+        </div>
+        <div class="wb-grid wb-schedule-setup">
+          <div class="card" id="resource-card"><div class="ch">Local test room</div>
+            <p class="muted">Creates a synthetic scheduling resource for local testing.</p>
+            <form id="resource-form" class="fg wb-form"><div class="fld"><label>Room name</label><input class="inp" name="name" required maxlength="160"></div>
+              <div class="wb-form-actions"><button class="btn" type="submit">Create local room</button></div></form>
+          </div>
+          <div class="card"><div class="ch">Request appointment</div>
+            <form id="appointment-form" class="fg r2 wb-form"><div class="fld"><label>Horse</label><select class="inp" name="horse_id" data-horses required></select></div>
+              <div class="fld"><label>Room / resource</label><select class="inp" id="appointment-resource" name="resource_id" required></select></div>
+              <div class="fld"><label>Start</label><input class="inp" name="starts_at" type="datetime-local" required></div>
+              <div class="fld"><label>End</label><input class="inp" name="ends_at" type="datetime-local" required></div>
+              <div class="wb-form-actions"><button class="btn btn-p" type="submit">Request appointment</button></div></form>
+          </div>
+        </div>
+        <div class="card"><div class="ch">Appointments</div><div class="fg r2 wb-change-fields">
+          <div class="fld"><label>Change or cancellation reason</label><input class="inp" id="change-reason" maxlength="1000"></div>
+          <div class="wb-new-time"><div class="fld"><label>New start</label><input class="inp" id="new-start" type="datetime-local"></div>
+            <div class="fld"><label>New end</label><input class="inp" id="new-end" type="datetime-local"></div></div>
+        </div><div id="appointment-records" class="wb-table-wrap"></div></div>
+        <div class="card"><div class="ch">Roster and qualification records</div>
+          <p class="muted">Recorded shifts and qualifications only. No workload score or clinical eligibility decision is inferred.</p>
+          <div id="roster-records" class="wb-table-wrap"></div></div>
+      </section>
+
+      <section class="page wb-page" id="audit" hidden>
+        <div class="ph"><div class="ph-l"><div class="ph-title">Audit history</div>
+          <div class="ph-sub">Search the current authorized branch’s application audit records.</div></div></div>
+        <div class="card"><div class="ch">Search audit events</div>
+          <form id="audit-form" class="fg r3 wb-form"><div class="fld"><label>Action</label><input class="inp" name="action" placeholder="appointment.rescheduled"></div>
+            <div class="fld"><label>Record type</label><input class="inp" name="aggregate_type" placeholder="horse"></div>
+            <div class="fld"><label>Record UUID</label><input class="inp" name="aggregate_id"></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Search history</button></div></form>
+          <div id="audit-records" class="wb-table-wrap"></div>
+          <div class="wb-paging"><button class="btn btn-sm" id="audit-next" hidden type="button">Next page</button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="wb-mobile-nav" id="mobile-menus" aria-label="Permitted workflows"></nav>
+</div>
 <script type="module" src="backend-workbench.mjs"></script>
 </body>
 </html>

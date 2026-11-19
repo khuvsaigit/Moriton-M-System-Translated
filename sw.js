@@ -11,7 +11,7 @@
    ⚠️ Update APP_VERSION below with every release to purge stale cache.
    ============================================================ */
 
-const APP_VERSION = '2026-10-23-2';
+const APP_VERSION = '20261119';
 
 const SHELL_CACHE = 'moriton-shell-' + APP_VERSION;
 const ASSET_CACHE = 'moriton-assets-v1';
@@ -28,6 +28,8 @@ const URLS_TO_CACHE = [
   './pharmacy.js?v=' + APP_VERSION,
   './lab.js?v=' + APP_VERSION,
   './firebase.js?v=' + APP_VERSION,
+  './backend-workbench.css?v=' + APP_VERSION,
+  './p1-ui.mjs?v=' + APP_VERSION,
   './pwa.js?v=' + APP_VERSION,
   './manifest.json',
   './icons/favicon.ico'

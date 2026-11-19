@@ -301,6 +301,24 @@ input, select, textarea {
    PAGES
    ============================================================ */
 .page { display: none; flex-direction: column; gap: 14px; }
+.p1-session-card { border: 1px solid var(--border); }
+.p1-api-note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
+.p1-api-identity { font-size: 12px; overflow-wrap: anywhere; }
+.p1-api-status { min-height: 20px; margin-top: 6px; font-size: 12px; }
+.p1-mobile-nav { display: none; }
+.p1-workflows { display: contents; }
+.p1-workflows [hidden] { display: none !important; }
+body.p1-active #bn { display: none !important; }
+body.p1-active .p1-mobile-nav { display: none; }
+body.p1-active #p1-workflows { display: contents; }
+body.p1-active #p1-mobile-nav { display: flex; }
+body.p1-active #page-dashboard { display: none !important; }
+@media (max-width: 760px) {
+  body.p1-active #p1-mobile-nav { position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; display: flex; gap: 4px; overflow-x: auto; padding: 8px; background: var(--navy); box-shadow: 0 -4px 18px rgba(0,0,0,.16); }
+  body.p1-active #p1-mobile-nav .ni { flex: 0 0 auto; min-width: 76px; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; background: transparent; border: 0; font-size: 10px; }
+  body.p1-active #p1-mobile-nav .ni.active { color: var(--gold-light); }
+  body.p1-active .main { padding-bottom: 78px; }
+}
 .page.active { display: flex; }
 
 .ph {

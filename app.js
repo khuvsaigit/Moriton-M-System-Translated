@@ -1278,21 +1278,21 @@ const DEFAULT_USERS = [
 
 // Боломжит бүх хуудас (эрх тохируулахад ашиглана)
 const ALL_PAGES = [
-  { id: 'dashboard', label: 'Хяналтын самбар' },
-  { id: 'register',  label: 'Адуу бүртгэл' },
-  { id: 'waiting',   label: 'Хүлээж байгаа' },
-  { id: 'exam',      label: 'Үзлэг / Эмчилгээ' },
-  { id: 'inpatient', label: 'Байрлан эмчлүүлэх' },
-  { id: 'planned',   label: 'Төлөвлөгөөт үзлэг' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'register',  label: 'Horse registration' },
+  { id: 'waiting',   label: 'Waiting room' },
+  { id: 'exam',      label: 'Examination / Treatment' },
+  { id: 'inpatient', label: 'Inpatient care' },
+  { id: 'planned',   label: 'Scheduled visits' },
   { id: 'finance',   label: 'Accountant / Finance' },
-  { id: 'history',   label: 'Түүх' },
-  { id: 'lab',       label: 'Шинжилгээ' },
-  { id: 'review',    label: 'Senior Veterinarianийн хяналт' },
+  { id: 'history',   label: 'History' },
+  { id: 'lab',       label: 'Laboratory' },
+  { id: 'review',    label: 'Senior veterinarian review' },
   { id: 'pharmacy',  label: 'Pharmacy Duty' },
-  { id: 'timesheet', label: 'Цагийн бүртгэл' },
-  { id: 'kpi',       label: 'KPI самбар' },
-  { id: 'report',    label: 'Өдрийн тайлан' },
-  { id: 'admin',     label: 'Системийн тохиргоо' }
+  { id: 'timesheet', label: 'Timesheet' },
+  { id: 'kpi',       label: 'KPI dashboard' },
+  { id: 'report',    label: 'Daily report' },
+  { id: 'admin',     label: 'System settings' }
 ];
 
 // Боломжит дүрүүд — үндсэн жагсаалт. Admin «Нэвтрэх эрх» цонхноос шинэ дүр
@@ -1403,7 +1403,7 @@ function canAccess(page) {
   const pages = (me && Array.isArray(me.pages)) ? me.pages : pagesForRole(STATE.user.role);
   // 🗓️ Төлөвлөгөөт үзлэг: тусгайлан эрх өгөөгүй ч адуу бүртгэх эрхтэй хүн шивж болно
   if (page === 'planned' && !pages.includes('planned') && pages.includes('register')) return true;
-  // 🩺 Senior Veterinarianийн хяналт: онош батлах эрхтэй хүн (Өсөхбаяр, Сайнбилэг), Chief Veterinarian, Admin —
+  // 🩺 Senior veterinarian review: онош батлах эрхтэй хүн (Өсөхбаяр, Сайнбилэг), Chief Veterinarian, Admin —
   // хуудасны жагсаалтад тусгайлан нэмээгүй ч орно (хуучин хэрэглэгчдийн pages-д 'review' байхгүй)
   if (page === 'review' && !pages.includes('review') && (canApproveDx() || ['Chief Veterinarian', 'Admin'].includes(STATE.user.role))) return true;
   // 💊 Эмийн сан: Pharmacist, Chief Veterinarian, Senior Veterinarian, Admin — хуучин хэрэглэгчдийн pages-д 'pharmacy' байхгүй ч орно
@@ -1443,17 +1443,17 @@ function doLogin() {
   const err = document.getElementById('login-err');
   const userName = userSel ? userSel.value : '';
   const pw = pwInput ? pwInput.value : '';
-  if (!userName) { if (err) err.textContent = 'Нэвтрэх нэр сонгоно уу'; return; }
-  if (!pw)       { if (err) err.textContent = 'Нууц үг оруулна уу'; return; }
+  if (!userName) { if (err) err.textContent = 'Select a login name.'; return; }
+  if (!pw)       { if (err) err.textContent = 'Enter your password.'; return; }
   const u = getUsers()[userName];
   if (!u) {
-    if (err) err.textContent = 'Нэвтрэх нэр буруу байна';
+    if (err) err.textContent = 'Incorrect login name.';
     return;
   }
   // Async hash шалгалт
   _checkPassword(pw, u).then(ok => {
     if (!ok) {
-      if (err) err.textContent = 'Нууц үг буруу байна';
+      if (err) err.textContent = 'Incorrect password.';
       if (pwInput) { pwInput.value = ''; pwInput.focus(); }
       return;
     }
@@ -1472,12 +1472,13 @@ function doLogin() {
       nav('dashboard');
     }
   }).catch(() => {
-    if (err) err.textContent = 'Нэвтрэх алдаа гарлаа. Дахин оролдоно уу.';
+    if (err) err.textContent = 'Sign-in failed. Please try again.';
   });
 }
 
 function logout() {
-  if (!confirm('Гарах уу? Хадгалагдсан өгөгдөл арилахгүй.')) return;
+  if (!confirm('Sign out? Saved data will not be deleted.')) return;
+  if (window.p1Disconnect) window.p1Disconnect().catch(() => {});
   STATE.user = null;
   try { localStorage.removeItem('mt_user'); } catch(e) {}
   // Hide app, show login
@@ -1488,17 +1489,18 @@ function logout() {
   const pwInput = document.getElementById('login-pw');
   if (userSel) userSel.value = '';
   if (pwInput) pwInput.value = '';
-  toast('👋 Гарлаа', 'ok');
+  toast('👋 Signed out', 'ok');
 }
 
 // ============================================================
 // NAV
 // ============================================================
 function nav(p, opts) {
+  if (window.p1Exit) window.p1Exit();
   opts = opts || {};
   // Role-based access check — redirect to dashboard if not allowed
   if (STATE.user && !canAccess(p)) {
-    toast('Энэ хуудсанд хандах эрх алга байна', 'err');
+    toast('You do not have permission to open this page.', 'err');
     p = 'dashboard';
   }
   const samePage = (STATE.activePage === p);
@@ -1877,7 +1879,7 @@ function updateBadges() {
   if ($('#bdg-w2')) $('#bdg-w2').textContent = w;
   if ($('#bdg-i2')) $('#bdg-i2').textContent = i;
   if ($('#bdg-f2')) $('#bdg-f2').textContent = f;
-  // 🩺 Senior Veterinarianийн хяналт — батлах хүлээгдэж буй онош
+  // 🩺 Senior veterinarian review — батлах хүлээгдэж буй онош
   try {
     const rv = dxOpenList().filter(e => e.dxStatus === 'pending').length;
     ['bdg-rv', 'bdg-rv2'].forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = rv; el.style.display = rv ? '' : 'none'; } });
@@ -4775,7 +4777,7 @@ function dischargeInpatient() {
         <span>🏠 Гэрийн эм:</span><span class="bold" id="inp-dis-hm">0₮</span>
       </div>
       <div class="row" style="justify-content:space-between;font-size:14px;margin-bottom:4px;padding-top:6px;border-top:1px solid var(--border)">
-        <span class="bold">Нийт дүн:</span><span class="bold" id="inp-dis-grand">${fmt(grandTotal)}</span>
+        <span class="bold">Total amount:</span><span class="bold" id="inp-dis-grand">${fmt(grandTotal)}</span>
       </div>
       <div class="row" style="justify-content:space-between;font-size:13px;margin-bottom:4px">
         <span>Төлсөн урьдчилгаа:</span><span class="bold" style="color:var(--green)">−${fmt(prepaid)}</span>
@@ -5043,7 +5045,7 @@ function printOwnerSheet(inpId) {
 
   <div style="font-weight:900;font-size:10.5pt;border-bottom:1pt solid #000;padding-bottom:1mm;margin-bottom:2mm">💰 Төлбөрийн хураангуй</div>
   <table style="width:60%;border-collapse:collapse;font-size:9.5pt;margin-bottom:6mm">
-    <tr><td style="padding:1.5mm 0">Нийт дүн:</td><td style="text-align:right;font-weight:700">${fmt(total)}</td></tr>
+    <tr><td style="padding:1.5mm 0">Total amount:</td><td style="text-align:right;font-weight:700">${fmt(total)}</td></tr>
     <tr><td style="padding:1.5mm 0">Төлсөн:</td><td style="text-align:right;font-weight:700;color:#2f7a52">${fmt(paid)}</td></tr>
     <tr style="border-top:1pt solid #000"><td style="padding:1.5mm 0;font-weight:900">Үлдэгдэл:</td><td style="text-align:right;font-weight:900;font-size:11pt;${due > 0 ? 'color:#a33' : ''}">${fmt(due)}</td></tr>
   </table>
@@ -5430,7 +5432,7 @@ function renderFinLedger(finsK) {
     </div>
     <div class="tbl-wrap" style="overflow-x:auto">
     <table class="ledger-tb">
-      <thead><tr><th style="width:22px"></th><th>Эзэн</th><th>Утас</th><th class="num">Нэхэмжлэх</th><th class="num">Нийт дүн</th><th class="num">Төлсөн</th><th class="num">Үлдэгдэл</th><th>Хамгийн хуучин</th><th>Насжилт</th></tr></thead>
+      <thead><tr><th style="width:22px"></th><th>Эзэн</th><th>Утас</th><th class="num">Нэхэмжлэх</th><th class="num">Total amount</th><th class="num">Төлсөн</th><th class="num">Үлдэгдэл</th><th>Хамгийн хуучин</th><th>Насжилт</th></tr></thead>
       <tbody>
         ${L.rows.map(g => {
           const key = String(g.owner).trim().toLowerCase();
@@ -5489,7 +5491,7 @@ function printFinLedger() {
   <table><tr><th>Нийт авлага</th><th>0–30 хоног</th><th>31–60</th><th>61–90</th><th>90+</th><th>Эзэн</th><th>Нэхэмжлэх</th></tr>
   <tr><td class="n"><b>${fmt(L.tot.due)}</b></td><td class="n">${fmt(L.tot.b[0])}</td><td class="n">${fmt(L.tot.b[1])}</td><td class="n">${fmt(L.tot.b[2])}</td><td class="n">${fmt(L.tot.b[3])}</td><td class="n">${L.rows.length}</td><td class="n">${L.tot.n}</td></tr></table>
   <table>
-    <thead><tr><th style="width:6mm">№</th><th>Эзэн / бичлэг</th><th style="width:22mm">Утас · огноо</th><th style="width:24mm">Эмч · төрөл</th><th style="width:20mm">Нийт дүн</th><th style="width:20mm">Төлсөн</th><th style="width:20mm">Үлдэгдэл</th><th style="width:14mm">Хоног</th></tr></thead>
+    <thead><tr><th style="width:6mm">№</th><th>Эзэн / бичлэг</th><th style="width:22mm">Утас · огноо</th><th style="width:24mm">Эмч · төрөл</th><th style="width:20mm">Total amount</th><th style="width:20mm">Төлсөн</th><th style="width:20mm">Үлдэгдэл</th><th style="width:14mm">Хоног</th></tr></thead>
     <tbody>${L.rows.map((g, k) => `<tr class="own"><td class="n">${k + 1}</td><td>${escHTML(g.owner)} <span style="font-weight:400">(${g.n})</span></td><td>${escHTML(g.phone)}</td><td></td><td class="n">${fmt(g.amount)}</td><td class="n">${fmt(g.paid)}</td><td class="n">${fmt(g.due)}</td><td class="n">${g.maxAge}</td></tr>` +
       g.recs.map(f => `<tr class="sub"><td></td><td style="padding-left:5mm">${escHTML(f.horse || '')}${f.examNum ? ' · №' + escHTML(f.examNum) : ''}${f.services ? ' · ' + escHTML(String(f.services).slice(0, 45)) : ''}</td><td>${escHTML(f.date || '')}</td><td>${escHTML(f.docName || '')} · ${srcLbl[finSourceOf(f)] || ''}</td><td class="n">${fmt(f.amount)}</td><td class="n">${fmt(getPaidAmount(f))}</td><td class="n">${fmt(getDueAmount(f))}</td><td class="n">${_ageDays(f.date)}</td></tr>`).join('')).join('')}
     <tr class="own"><td></td><td colspan="3">НИЙТ</td><td class="n">${fmt(L.tot.amount)}</td><td class="n">${fmt(L.tot.paid)}</td><td class="n">${fmt(L.tot.due)}</td><td></td></tr></tbody>
@@ -5505,7 +5507,7 @@ function printFinLedger() {
 function exportFinLedgerCSV() {
   const L = buildFinLedger(_ledgerFins());
   const srcLbl = { clinic: 'Clinical Exam', inpatient: 'Байрлан', planned: 'ТҮ' };
-  const rows = [['Эзэн', 'Утас', 'Адуу', 'Дугаар', 'Огноо', 'Эмч', 'Төрөл', 'Үйлчилгээ', 'Нийт дүн', 'Төлсөн', 'Үлдэгдэл', 'Хоног']];
+  const rows = [['Эзэн', 'Утас', 'Адуу', 'Дугаар', 'Огноо', 'Эмч', 'Төрөл', 'Үйлчилгээ', 'Total amount', 'Төлсөн', 'Үлдэгдэл', 'Хоног']];
   L.rows.forEach(g => g.recs.forEach(f => rows.push([g.owner, g.phone, f.horse || '', f.examNum || '', f.date || '', f.docName || '', srcLbl[finSourceOf(f)] || '', f.services || '', parseFloat(f.amount) || 0, getPaidAmount(f), getDueAmount(f), _ageDays(f.date)])));
   L.inpRows.forEach(r => rows.push([r.i.owner, r.i.phone || '', r.i.horse, '', r.i.admittedDate || '', r.doc, 'Байрлаж буй (нэхэмжлээгүй)', r.loc, r.full, r.pre, r.due, r.days]));
   downloadCSV(rows, 'avlaga_' + todayStr() + '.csv');
@@ -5747,7 +5749,7 @@ function renderRecvDetail() {
       ${servicesPricedHTML(f)}
     </div>
     <div class="fg r3" style="margin-top:8px">
-      <div class="fld"><label>Нийт дүн</label><div style="font-size:16px;font-weight:900">${fmt(f.amount)}</div></div>
+      <div class="fld"><label>Total amount</label><div style="font-size:16px;font-weight:900">${fmt(f.amount)}</div></div>
       <div class="fld"><label>Төлсөн</label><div style="font-size:16px;font-weight:900;color:var(--green)">${fmt(paidAmt)}</div></div>
       <div class="fld"><label>Үлдэгдэл</label><div style="font-size:18px;font-weight:900;color:var(--red)">${fmt(due)}</div></div>
     </div>
@@ -6434,7 +6436,7 @@ function printInvoice(id) {
     </div>
     <div style="background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:11px;opacity:0.7;letter-spacing:1px">НИЙТ ДҮНГИЙН ТӨЛБӨР</div>
+        <div style="font-size:11px;opacity:0.7;letter-spacing:1px">TOTAL INVOICE AMOUNT</div>
         <div style="font-size:28px;font-weight:900;color:var(--orange2);margin-top:4px">${fmt(f.amount)}</div>
       </div>
       <div style="text-align:right;font-size:12px;opacity:0.75"><div>Морьтон Адууны Төв</div><div>📞 77220404</div></div>
@@ -6634,7 +6636,7 @@ function printInpatientCard(inpId) {
   /* 📖 Нэг дэвтэр шиг үргэлжилсэн хэвлэлт:
      - Хүснэгтийн толгой хуудас бүр дээр давтагдана
      - Мөр хуудасны зааг дээр таслагдахгүй
-     - Нийт дүн + гарын үсгийн хэсэг хамт нэг хуудсанд багтана */
+     - Total amount + гарын үсгийн хэсэг хамт нэг хуудсанд багтана */
   #print-area table { page-break-inside: auto; }
   #print-area thead { display: table-header-group; }
   #print-area tfoot { display: table-footer-group; }
@@ -6674,7 +6676,7 @@ function printInpatientCard(inpId) {
   </table>
   <div class="inp-book-tail">
   <table style="width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:8mm">
-    <tr><td colspan="4" style="border:0.5pt solid #000"></td><td style="text-align:right;font-weight:900;padding:2mm;border:0.5pt solid #000">НИЙТ ДҮН</td><td style="text-align:right;font-weight:900;padding:2mm;border:0.5pt solid #000;width:24mm">${fmt(grandTotal)}</td></tr>
+    <tr><td colspan="4" style="border:0.5pt solid #000"></td><td style="text-align:right;font-weight:900;padding:2mm;border:0.5pt solid #000">TOTAL AMOUNT</td><td style="text-align:right;font-weight:900;padding:2mm;border:0.5pt solid #000;width:24mm">${fmt(grandTotal)}</td></tr>
     ${prepayRows}
     <tr><td colspan="4" style="border:0.5pt solid #000"></td><td style="text-align:right;padding:2mm;border:0.5pt solid #000">Төлсөн урьдчилгаа</td><td style="text-align:right;padding:2mm;border:0.5pt solid #000;color:#2f7a52">−${fmt(prepaid)}</td></tr>
     <tr><td colspan="4" style="border:0.5pt solid #000"></td><td style="text-align:right;font-weight:900;font-size:10pt;padding:2mm;border:0.5pt solid #000;background:#f7ede9">ҮЛДЭГДЭЛ ТӨЛӨХ</td><td style="text-align:right;font-weight:900;font-size:11pt;padding:2mm;border:0.5pt solid #000;background:#f7ede9">${fmt(due)}</td></tr>
@@ -8158,21 +8160,21 @@ function bonusMainSummaryHTML(B, print) {
   const sum = f => B.mainDocs.reduce((a, d) => a + (f(d) || 0), 0);
   const dash = print ? '' : '<span class="muted">—</span>';
   const R = 'style="text-align:right"';
-  return `<tr><th>Нэрс</th><th>Албан тушаал</th><th ${R}>Үзлэг</th>${BONUS_MAIN_CATS.map(c => `<th ${R}>${c}</th>`).join('')}<th ${R}>Хамтран</th><th ${R}>Нийт дүн</th></tr>` +
+  return `<tr><th>Нэрс</th><th>Албан тушаал</th><th ${R}>Үзлэг</th>${BONUS_MAIN_CATS.map(c => `<th ${R}>${c}</th>`).join('')}<th ${R}>Хамтран</th><th ${R}>Total amount</th></tr>` +
     B.mainDocs.map(d => `<tr><td${print ? '' : ' class="bold"'}>${escHTML(d.name)}</td><td${print ? '' : ' class="muted"'}>${escHTML(d.role)}</td>
       <td ${R}>${d.count}${d.assistCount ? (print ? ' +' : ' <span class="muted">+') + d.assistCount + (print ? '' : '</span>') : ''}</td>
       ${BONUS_MAIN_CATS.map(c => `<td ${R}>${d.cats[c] ? fmt(d.cats[c]) : dash}</td>`).join('')}
       <td ${R}>${d.assist ? fmt(d.assist) : dash}</td><td ${R}><b>${fmt(d.mainTotal)}</b></td></tr>`).join('') +
-    `<tr style="background:var(--input)"><td colspan="2"><b>Нийт дүн</b></td><td ${R}><b>${B.mainN}</b></td>${BONUS_MAIN_CATS.map(c => `<td ${R}><b>${fmt(sum(d => d.cats[c]))}</b></td>`).join('')}<td ${R}><b>${fmt(sum(d => d.assist))}</b></td><td ${R}><b>${fmt(B.mainTotal)}</b></td></tr>`;
+    `<tr style="background:var(--input)"><td colspan="2"><b>Total amount</b></td><td ${R}><b>${B.mainN}</b></td>${BONUS_MAIN_CATS.map(c => `<td ${R}><b>${fmt(sum(d => d.cats[c]))}</b></td>`).join('')}<td ${R}><b>${fmt(sum(d => d.assist))}</b></td><td ${R}><b>${fmt(B.mainTotal)}</b></td></tr>`;
 }
 function bonusPlSummaryHTML(B, print) {
   const sum = f => B.plDocs.reduce((a, d) => a + (f(d) || 0), 0);
   const dash = print ? '' : '<span class="muted">—</span>';
   const R = 'style="text-align:right"';
-  return `<tr><th>Нэрс</th><th>Албан тушаал</th><th ${R}>Үзлэг (ахлах эмч)</th><th ${R}>Senior Veterinarianийн дүн</th><th ${R}>Хамтарсан үзлэг</th><th ${R}>Хамтран дүн</th><th ${R}>Нийт дүн</th></tr>` +
+  return `<tr><th>Нэрс</th><th>Албан тушаал</th><th ${R}>Үзлэг (ахлах эмч)</th><th ${R}>Senior Veterinarianийн дүн</th><th ${R}>Хамтарсан үзлэг</th><th ${R}>Хамтран дүн</th><th ${R}>Total amount</th></tr>` +
     B.plDocs.map(d => `<tr><td${print ? '' : ' class="bold"'}>${escHTML(d.name)}</td><td${print ? '' : ' class="muted"'}>${escHTML(d.role)}</td>
       <td ${R}>${d.plCount || dash}</td><td ${R}>${d.plMain ? fmt(d.plMain) : dash}</td><td ${R}>${d.plAssistCount || dash}</td><td ${R}>${d.plAssist ? fmt(d.plAssist) : dash}</td><td ${R}><b>${fmt(d.plTotal)}</b></td></tr>`).join('') +
-    `<tr style="background:var(--input)"><td colspan="2"><b>Нийт дүн</b></td><td ${R}><b>${B.plN}</b></td><td ${R}><b>${fmt(sum(d => d.plMain))}</b></td><td ${R}><b>${B.plAsstN}</b></td><td ${R}><b>${fmt(sum(d => d.plAssist))}</b></td><td ${R}><b>${fmt(B.plTotal)}</b></td></tr>`;
+    `<tr style="background:var(--input)"><td colspan="2"><b>Total amount</b></td><td ${R}><b>${B.plN}</b></td><td ${R}><b>${fmt(sum(d => d.plMain))}</b></td><td ${R}><b>${B.plAsstN}</b></td><td ${R}><b>${fmt(sum(d => d.plAssist))}</b></td><td ${R}><b>${fmt(B.plTotal)}</b></td></tr>`;
 }
 
 let __bonusLast = null;
@@ -8234,7 +8236,7 @@ function renderBonus() {
           <td><select class="inp" style="padding:3px 6px;font-size:11px" onchange="setBonusCat('${escHTML(String(r.id))}', this.value)">${BONUS_CATS.map(x => `<option ${x === r.cat ? 'selected' : ''}>${x}</option>`).join('')}</select>${r.auto ? '' : '<div class="muted" style="font-size:9px">гараар</div>'}</td>
           <td style="text-align:center"><input type="checkbox" ${r.skip ? '' : 'checked'} ${r.noDoc ? 'disabled' : ''} onchange="setBonusSkip('${escHTML(String(r.id))}', !this.checked)" title="Урамшуулалд тооцох эсэх"></td>
         </tr>`).join('')}
-        <tr style="background:var(--input)"><td colspan="6" class="bold">Нийт дүн</td><td class="bold" style="text-align:right">${fmt(sumM)}</td><td></td><td class="bold" style="text-align:right">${fmt(sumA)}</td><td colspan="2"></td></tr>
+        <tr style="background:var(--input)"><td colspan="6" class="bold">Total amount</td><td class="bold" style="text-align:right">${fmt(sumM)}</td><td></td><td class="bold" style="text-align:right">${fmt(sumA)}</td><td colspan="2"></td></tr>
         </tbody></table></div>`;
     }).join('')}`;
 }
@@ -8265,7 +8267,7 @@ function printBonus() {
       <table class="pr-tbl">
         <tr><th>#</th><th>Огноо</th><th>Баримт №</th><th>Тоо хэмжээ</th><th>Senior Veterinarian</th><th>Мөнгөн дүн</th><th>Хамтрагч эмч</th><th>Мөнгөн дүн</th></tr>
         ${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escHTML(r.date)} ${escHTML(r.time)}</td><td>${escHTML(r.examNum)}</td><td style="text-align:right">${r.qty}</td><td>${escHTML(r.main)}</td><td style="text-align:right">${fmt(r.mainAmt)}</td><td>${escHTML(r.asst)}</td><td style="text-align:right">${r.asstAmt ? fmt(r.asstAmt) : ''}</td></tr>`).join('')}
-        <tr><td colspan="5"><b>Нийт дүн</b></td><td style="text-align:right"><b>${fmt(list.reduce((a, r) => a + r.mainAmt, 0))}</b></td><td></td><td style="text-align:right"><b>${fmt(list.reduce((a, r) => a + r.asstAmt, 0))}</b></td></tr>
+        <tr><td colspan="5"><b>Total amount</b></td><td style="text-align:right"><b>${fmt(list.reduce((a, r) => a + r.mainAmt, 0))}</b></td><td></td><td style="text-align:right"><b>${fmt(list.reduce((a, r) => a + r.asstAmt, 0))}</b></td></tr>
       </table>
     </div>`;
   };
@@ -8291,11 +8293,11 @@ function exportBonusCSV() {
   BONUS_CATS.forEach(c => B.byCat[c].forEach(r => rows.push([c, r.date, r.time, r.examNum, r.horse, r.owner, r.svc, r.qty, r.main, r.mainAmt, r.asst, r.asstAmt, r.skip ? 'Хасагдсан' : 'Тийм'])));
   const S = f => B.mainDocs.reduce((a, d) => a + (f(d) || 0), 0), P = f => B.plDocs.reduce((a, d) => a + (f(d) || 0), 0);
   rows.push([]); rows.push(['ҮНДСЭН ҮЗЛЭГИЙН УРАМШУУЛАЛ (төлөвлөгөөтгүй) — ' + bonusMonthLabel(B.ym)]);
-  rows.push(['Нэрс', 'Албан тушаал', 'Үзлэг', 'Хамтарсан үзлэг', ...BONUS_MAIN_CATS, 'Хамтран', 'Нийт дүн']);
+  rows.push(['Нэрс', 'Албан тушаал', 'Үзлэг', 'Хамтарсан үзлэг', ...BONUS_MAIN_CATS, 'Хамтран', 'Total amount']);
   B.mainDocs.forEach(d => rows.push([d.name, d.role, d.count, d.assistCount, ...BONUS_MAIN_CATS.map(c => d.cats[c] || 0), d.assist, d.mainTotal]));
   rows.push(['Нийт', '', B.mainN, B.mainAsstN, ...BONUS_MAIN_CATS.map(c => S(d => d.cats[c])), S(d => d.assist), B.mainTotal]);
   rows.push([]); rows.push(['ТӨЛӨВЛӨГӨӨТ ҮЗЛЭГИЙН УРАМШУУЛАЛ — ' + bonusMonthLabel(B.ym)]);
-  rows.push(['Нэрс', 'Албан тушаал', 'Үзлэг (ахлах эмч)', 'Senior Veterinarianийн дүн', 'Хамтарсан үзлэг', 'Хамтран дүн', 'Нийт дүн']);
+  rows.push(['Нэрс', 'Албан тушаал', 'Үзлэг (ахлах эмч)', 'Senior Veterinarianийн дүн', 'Хамтарсан үзлэг', 'Хамтран дүн', 'Total amount']);
   B.plDocs.forEach(d => rows.push([d.name, d.role, d.plCount, d.plMain, d.plAssistCount, d.plAssist, d.plTotal]));
   rows.push(['Нийт', '', B.plN, P(d => d.plMain), B.plAsstN, P(d => d.plAssist), B.plTotal]);
   rows.push([]); rows.push(['БҮГД', '', '', '', '', '', B.total]);
@@ -8410,7 +8412,7 @@ const EXPORT_FIELDS = {
     ['anamnesis',    'Анамнез',          'anamnesis',       'Бүртгэлийн үед бичсэн түүх', "Case history recorded at reception"],
     ['@symptoms',    'Шинж тэмдэг',      'symptoms',        'Эмчийн сонгосон шинж тэмдгүүд (таслалаар)', "Symptoms selected by the vet (comma separated)"],
     ['diagnosis',    'Онош',             'diagnosis',       'Онош', "Diagnosis"],
-    ['@dxStatus',    'Онош батлалт',     'dx_review_status', 'Senior Veterinarianийн хяналт: хянагдаж байна / батлагдсан / буцаагдсан (хоосон = журмаас өмнөх)', "Senior-vet diagnosis review: pending / approved / returned (blank = before the review rule)"],
+    ['@dxStatus',    'Онош батлалт',     'dx_review_status', 'Senior veterinarian review: хянагдаж байна / батлагдсан / буцаагдсан (хоосон = журмаас өмнөх)', "Senior-vet diagnosis review: pending / approved / returned (blank = before the review rule)"],
     ['dxApprovedBy', 'Онош баталсан',    'dx_approved_by',  'Оношийг баталсан ахлах эмч', "Senior vet who approved the diagnosis"],
     ['@dxApprovedAt','Баталсан цаг',     'dx_approved_at',  'YYYY-MM-DD HH:MM', "Approval time"],
     ['dxOriginal',   'Анхны онош (засахаас өмнө)', 'dx_original', 'Senior Veterinarian засаж баталсан бол эмчийн анх бичсэн онош', "Vet's original diagnosis when the senior vet edited it"],
@@ -8421,7 +8423,7 @@ const EXPORT_FIELDS = {
     ['wt',           'Жин',              'weight_kg',       'kg', "Body weight (kg)"],
     ['@services',    'Үйлчилгээ',        'services',        'Үйлчилгээний нэрс (таслалаар) — дэлгэрэнгүйг ExamServices хуудсаас', "Service names (comma separated) — see ExamServices sheet for line items"],
     ['@meds',        'Эм',               'medicines',       'Эмийн нэрс (таслалаар) — дэлгэрэнгүйг ExamMedicines хуудсаас', "Medicine names (comma separated) — see ExamMedicines sheet"],
-    ['amount',       'Нийт дүн',         'total_amount',    '₮', "Total invoiced amount (MNT)"],
+    ['amount',       'Total amount',         'total_amount',    '₮', "Total invoiced amount (MNT)"],
     ['durationMin',  'Үргэлжилсэн (мин)','duration_min',    'Бүртгэснээс дуусгах хүртэлх минут', "Minutes from registration to completion"],
     ['@inpatient',   'Байрлан эмчлүүлсэн эсэх','is_inpatient','Тийм/Үгүй', "Whether the case was admitted as inpatient"],
     ['@imageCount',  'Зургийн тоо',      'image_count',     'Хавсаргасан зургийн тоо', "Number of attached photos (files stay in Firebase Storage)"],
@@ -8455,7 +8457,7 @@ const EXPORT_FIELDS = {
     ['@team',       'Баг (эмч нар)',  'team',             'Явцын эмч нар', "Veterinarians on the trip"],
     ['docName',     'Senior Veterinarian',      'lead_doctor',      'Багийн ахлах эмч', "Lead veterinarian"],
     ['@n',          'Үзлэгийн тоо',   'exam_count',       'Явцад шивсэн үзлэг', "Exams recorded on this trip"],
-    ['@amount',     'Нийт дүн',       'total_amount',     '₮', "Total invoiced amount (MNT)"],
+    ['@amount',     'Total amount',       'total_amount',     '₮', "Total invoiced amount (MNT)"],
     ['@statusMn',   'Төлөв',          'status',           'Нээлттэй / Хаагдсан', "Open / Closed"],
     ['note',        'Тэмдэглэл',      'note',             'Тэмдэглэл', "Note"],
     ['createdBy',   'Үүсгэсэн',       'created_by',       'Үүсгэсэн хэрэглэгч', "Created by"],
@@ -8471,7 +8473,7 @@ const EXPORT_FIELDS = {
     ['phone',     'Утас',               'phone',         'Утас', "Phone"],
     ['docName',   'Эмч',                'doctor_name',   'Эмч', "Veterinarian"],
     ['services',  'Үйлчилгээ',          'services',      'Үйлчилгээний нэрс', "Services billed (text)"],
-    ['amount',    'Нийт дүн',           'total_amount',  '₮', "Invoice total (MNT)"],
+    ['amount',    'Total amount',           'total_amount',  '₮', "Invoice total (MNT)"],
     ['@paidSum',  'Төлсөн дүн',         'paid_amount',   'Хийгдсэн төлбөрийн нийлбэр', "Sum of recorded payments (MNT)"],
     ['@due',      'Үлдэгдэл',           'balance_due',   'Төлөгдөөгүй үлдэгдэл', "Outstanding balance (MNT)"],
     ['@status',   'Төлөв',              'status',        'Төлсөн / Хэсэгчлэн / Төлөөгүй', "Paid / Partial / Unpaid"],
@@ -9086,7 +9088,7 @@ function renderTripDetail() {
         <div class="stat"><div class="stat-l">🐎 Адуу</div><div class="snum">${s.horses}</div></div>
         <div class="stat accent"><div class="stat-l">📋 Үзлэг</div><div class="snum">${s.n}</div></div>
         <div class="stat purple"><div class="stat-l">💉 Үйлчилгээ</div><div class="snum">${s.services}</div></div>
-        <div class="stat green"><div class="stat-l">💰 Нийт дүн</div><div class="snum">${fmtCompact(s.amount)}</div></div>
+        <div class="stat green"><div class="stat-l">💰 Total amount</div><div class="snum">${fmtCompact(s.amount)}</div></div>
       </div>
       ${Object.keys(byProv).length ? '<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px">' + Object.keys(byProv).sort().map(k => '<span class="badge">' + escHTML(k) + ': <b>' + byProv[k] + '</b></span>').join('') + '</div>' : ''}
       <div class="fg r4" style="margin-top:10px">
@@ -9301,7 +9303,7 @@ function printTripReport() {
   $('#print-area').innerHTML = `<div class="rp-print">
     <div class="pr-h1">Төлөвлөгөөт үзлэгийн явцын тайлан</div>
     <div style="text-align:center;margin-bottom:8px">Морьтон Адууны Төв · ${escHTML(tripLabel(t))}${t.soum ? ' · ' + escHTML(t.soum) : ''}</div>
-    <table class="pr-tbl"><tr><th>Огноо</th><th>Маршрут</th><th colspan="2">Баг (эмч нар)</th><th>Адуу</th><th>Үзлэг</th><th>Үйлчилгээ</th><th>Нийт дүн</th></tr>
+    <table class="pr-tbl"><tr><th>Огноо</th><th>Маршрут</th><th colspan="2">Баг (эмч нар)</th><th>Адуу</th><th>Үзлэг</th><th>Үйлчилгээ</th><th>Total amount</th></tr>
       <tr><td>${escHTML(t.date)}${t.endDate && t.endDate !== t.date ? ' → ' + escHTML(t.endDate) : ''}</td><td>${escHTML(t.route || t.location || '')}</td><td colspan="2">${escHTML(tripDocNames(t))}</td><td>${s.horses}</td><td>${s.n}</td><td>${s.services}</td><td>${fmt(s.amount)}</td></tr></table>
     ${t.note ? '<div style="font-size:9.5pt;margin-bottom:6px"><b>Тэмдэглэл:</b> ' + escHTML(t.note) + '</div>' : ''}
     <div class="pr-h2">Үзсэн адуу</div>

@@ -8,10 +8,10 @@ export function localApiBase(value) {
 }
 
 const sections = [
-  ['branch', 'Current branch', ['branch.read']],
-  ['intake', 'Reception and contacts', ['registry.read', 'contact.read', 'reception.read']],
-  ['appointments', 'Appointments and roster', ['appointment.read', 'roster.read']],
-  ['audit', 'Audit history', ['audit.read']],
+  ['branch', 'Current branch', ['branch.read'], '🏢'],
+  ['intake', 'Registration and reception', ['registry.read', 'contact.read', 'reception.read'], '🐴'],
+  ['appointments', 'Appointments and roster', ['appointment.read', 'roster.read'], '🗓️'],
+  ['audit', 'Audit history', ['audit.read'], '📋'],
 ];
 export function visibleSections(permissions) {
   return sections.filter(([, , actions]) => actions.some((action) => permissions.includes(action)));
@@ -50,9 +50,13 @@ function initialize() {
   function message(text, error = false) { $('status').textContent = text; $('status').className = error ? 'error' : 'ok'; }
   function clearSession() {
     session = null; profile = null; cursor = null;
-    $('menus').replaceChildren(); $('identity').textContent = 'No active local session.';
+    activeSection = null;
+    $('menus').replaceChildren(); $('mobile-menus').replaceChildren();
+    $('identity').textContent = 'No active local session.';
     $('logout').disabled = true;
-    for (const [id] of sections) $(id).hidden = true;
+    for (const [id] of sections) { $(id).hidden = true; $(id).classList.remove('active'); }
+    $('workbench-home').hidden = false; $('workbench-home').classList.add('active');
+    $('connect-card').hidden = false;
     for (const id of ['horses', 'contacts', 'parties', 'reception', 'appointment-records', 'roster-records', 'audit-records']) $(id).replaceChildren();
     for (const select of document.querySelectorAll('[data-horses],#party-contact,#appointment-resource')) select.replaceChildren();
     for (const id of ['branch-form', 'horse-form', 'contact-form', 'party-form', 'reception-form']) $(id).reset();
@@ -65,6 +69,24 @@ function initialize() {
     }
   }
   const values = (form) => Object.fromEntries(new FormData(form).entries());
+  let activeSection = null;
+  function setActiveSection(id) {
+    const chosen = visibleSections(session?.permissions || []).find((entry) => entry[0] === id);
+    if (!chosen) return;
+    activeSection = id;
+    for (const [sectionId] of sections) {
+      const page = $(sectionId);
+      const active = sectionId === id;
+      page.hidden = !active;
+      page.classList.toggle('active', active);
+    }
+    document.querySelectorAll('[data-workbench-section]').forEach((item) => {
+      const active = item.dataset.workbenchSection === id;
+      item.classList.toggle('active', active);
+      if (active) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    });
+  }
   function iso(value) { const date = new Date(value); if (!value || !Number.isFinite(date.getTime())) throw new Error('Enter a valid date and time.'); return date.toISOString(); }
   function table(target, headers, rows) {
     const grid = element('table'), head = element('tr'); headers.forEach((label) => head.append(element('th', label)));
@@ -75,7 +97,7 @@ function initialize() {
     if (!rows.length) $(target).append(element('p', 'No records in this branch/window.'));
   }
   function button(label, action) {
-    const b = element('button', label); b.type = 'button';
+    const b = element('button', label); b.type = 'button'; b.className = 'btn btn-xs';
     b.addEventListener('click', () => run(async () => { b.disabled = true; try { await action(); } finally { b.disabled = false; } }));
     return b;
   }
@@ -85,10 +107,22 @@ function initialize() {
     if (rows.some((row) => row.id === prior)) select.value = prior;
   }
   function configureMenus() {
-    $('menus').replaceChildren(); for (const [id] of sections) $(id).hidden = true;
-    for (const [id, label] of visibleSections(session.permissions)) {
-      $(id).hidden = false; const link = element('a', label); link.href = '#' + id; $('menus').append(link);
+    $('menus').replaceChildren(); $('mobile-menus').replaceChildren();
+    for (const [id] of sections) { $(id).hidden = true; $(id).classList.remove('active'); }
+    const available = visibleSections(session.permissions);
+    for (const [id, label, , icon] of available) {
+      for (const menu of [$('menus'), $('mobile-menus')]) {
+        const item = element('button'); item.type = 'button'; item.className = 'ni';
+        item.dataset.workbenchSection = id; item.setAttribute('aria-label', label);
+        const glyph = element('span', icon); glyph.className = 'ni-icon'; glyph.setAttribute('aria-hidden', 'true');
+        const text = element('span', label); text.className = 'ni-label';
+        item.append(glyph, text); item.addEventListener('click', () => setActiveSection(id));
+        menu.append(item);
+      }
     }
+    $('workbench-home').hidden = true;
+    if (!available.some(([id]) => id === activeSection)) activeSection = available[0]?.[0] || null;
+    if (activeSection) setActiveSection(activeSection);
     for (const [id, permission] of [['branch-form', 'branch.manage'], ['horse-form', 'registry.create'],
       ['contact-form', 'contact.create'], ['party-form', 'party.create'], ['reception-form', 'reception.create'],
       ['resource-form', 'demo.resource.create'], ['appointment-form', 'appointment.request']]) $(id).hidden = !can(permission);
@@ -181,7 +215,7 @@ function initialize() {
     session = await client.request('/api/v1/session');
     if (!session.local_prototype) throw new Error('This workbench requires an opted-in local development session.');
     $('identity').textContent = `Actor ${session.actor_id} · branch ${session.branch_id} · expires ${session.expires_at}`;
-    $('logout').disabled = false; configureMenus();
+    $('logout').disabled = false; $('connect-card').hidden = true; configureMenus();
     await loadBranch(); await loadRegistry();
     if (can('appointment.read') || can('roster.read')) await loadSchedule();
     message('Local session connected. Menus reflect server permissions.');

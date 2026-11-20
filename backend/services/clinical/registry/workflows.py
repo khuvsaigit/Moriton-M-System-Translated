@@ -21,6 +21,7 @@ from .models import (
     HorseIdentifier,
     HorsePartyRole,
     InboxReceipt,
+    Practitioner,
     ReceptionTask,
     ReceptionTaskHistory,
     Visit,
@@ -496,6 +497,11 @@ def assign_visit(*, visit_id: UUID, organization_id: UUID, branch_id: UUID,
         ).first()
         if visit is None:
             raise Visit.DoesNotExist
+        if not Practitioner.objects.filter(
+            id=practitioner_id, organization_id=organization_id,
+            branch_id=branch_id, active=True,
+        ).exists():
+            raise Practitioner.DoesNotExist
         assignment = VisitAssignment.objects.create(
             organization_id=organization_id, branch_id=branch_id, visit=visit,
             practitioner_id=practitioner_id, assigned_by=actor_id, reason=reason.strip()[:240],

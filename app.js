@@ -1533,6 +1533,7 @@ function nav(p, opts) {
   if (p === 'pharmacy' && typeof renderPharmacy === 'function') renderPharmacy();
   if (p === 'timesheet' && typeof renderTimesheet === 'function') renderTimesheet();
   if (p === 'admin') renderAdmin();
+  if (window.p1PageChanged) window.p1PageChanged(p);
   // Reset scroll only on real navigation (not when re-rendering current page via sync)
   if (!opts.silent && !samePage) {
     $('#main').scrollTop = 0;
@@ -2549,40 +2550,65 @@ function liHTML(w, kind) {
   `;
 }
 
-// Утасны дугаараар өмнөх үйлчлүүлэгчийг хайж, ЗӨВХӨН эзний мэдээллийн
-// талбаруудыг бөглөнө. Адуу болон анамнезийн талбарт хүрэхгүй.
-function autoFillOwnerByPhone() {
-  const phoneInp = $('#r-phone');
-  if (!phoneInp) return;
-  const phone = phoneInp.value.replace(/\D/g, '');
-  if (phone.length < 6) return; // дутуу дугаар бол хайхгүй
-  const norm = s => String(s || '').replace(/\D/g, '');
-  // Утас нь үндсэн эсвэл нэмэлт утастай тохирох адуудыг олно
-  const matches = STATE.horses.filter(h => norm(h.phone) === phone || norm(h.phone2) === phone);
-  if (!matches.length) return;
-  // Хамгийн сүүлд бүртгэгдсэнийг сонгоно
-  matches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const prev = matches[0];
-  // Зөвхөн хоосон талбаруудыг бөглөнө (хэрэглэгчийн оруулсныг дарж бичихгүй)
-  const setIfEmpty = (id, val) => {
-    const el = $('#' + id);
-    if (el && !el.value && val) el.value = val;
-  };
-  setIfEmpty('r-owner', prev.owner);
-  setIfEmpty('r-phone2', prev.phone2);
-  setIfEmpty('r-soum', prev.soum);
-  // Аймаг нь select — утга жагсаалтад байвал л сонгоно
-  const provEl = $('#r-prov');
-  if (provEl && !provEl.value && prev.province) {
-    const opt = Array.from(provEl.options).find(o => o.value === prev.province);
-    if (opt) provEl.value = prev.province;
-  }
-  toast('👤 ' + (prev.owner || 'Өмнөх эзэн') + '-ийн мэдээлэл бөглөгдлөө', 'ok');
-}
-
 // ============================================================
 // REGISTER
 // ============================================================
+function p1OriginalRegistrationReady() {
+  const api = window.p1ClinicalApi;
+  const status = $('#r-api-status');
+  const matchPanel = $('#r-api-contact-match');
+  if (!status) return;
+  if (!api?.connected) {
+    status.textContent = 'Connect a P1 Clinical API session from the dashboard to register horses and visits.';
+    status.className = 'p1-inline-status';
+    if (matchPanel) matchPanel.hidden = true;
+    return;
+  }
+  const required = ['contact.read', 'party.create', 'reception.create', 'reception.link', 'visit.create'];
+  const missing = required.filter(permission => !api.can(permission));
+  status.textContent = missing.length
+    ? 'Clinical API connected. Registration is disabled until the local session is granted: ' + missing.join(', ')
+    : 'Clinical API connected. This form saves through the API. New horses need registry.create; selecting an existing horse needs registry.read. The server assigns the visit number. Saved visits appear in Waiting room.';
+  status.className = 'p1-inline-status' + (missing.length ? ' warn' : ' ok');
+  if (matchPanel) matchPanel.hidden = !api.can('contact.read');
+  autoFillExamNum();
+}
+
+async function searchRegistrationContacts() {
+  const api = window.p1ClinicalApi;
+  if (!api?.connected || !api.can('contact.read')) {
+    toast('The P1 session needs contact.read to search existing contacts.', 'err');
+    return;
+  }
+  const entries = [
+    { id: 'r-api-owner-match', name: $('#r-owner').value.trim(), phone: $('#r-phone').value.trim() },
+    { id: 'r-api-rep-match', name: $('#r-representative').value.trim(), phone: $('#r-representative-phone').value.trim() },
+    { id: 'r-api-payer-match', name: $('#r-payer').value.trim(), phone: $('#r-payer-phone').value.trim() },
+  ];
+  try {
+    for (const entry of entries) {
+      const select = $('#' + entry.id);
+      if (!select) continue;
+      const queries = [...new Set([entry.phone, entry.name].map(value => value.trim()).filter(Boolean))];
+      const candidates = new Map();
+      for (const query of queries) {
+        const results = await api.searchContacts(query);
+        for (const contact of results.items || []) candidates.set(contact.id, contact);
+      }
+      const contacts = [...candidates.values()];
+      const prior = select.value;
+      select.replaceChildren(new Option('No existing contact selected', ''));
+      for (const contact of contacts) {
+        select.add(new Option(`${contact.display_name}${contact.phone ? ' · ' + contact.phone : ''}`, contact.id));
+      }
+      if (contacts.some(contact => contact.id === prior)) select.value = prior;
+    }
+    toast('Review each contact suggestion and select a record manually. No automatic phone match was made.', 'ok');
+  } catch (error) {
+    toast(error.message || 'Contact search failed.', 'err');
+  }
+}
+
 function initRegPage() {
   const sel = $('#r-prov');
   if (sel.options.length <= 1) {
@@ -2593,31 +2619,13 @@ function initRegPage() {
     });
   }
   if (!$('#r-date').value) $('#r-date').value = todayStr();
-  // Auto-fill exam number if empty
+  // New visit numbers are issued by the Clinical API after registration.
   if (!$('#r-examnum').value) autoFillExamNum();
-  // Дугаар бичих явцад давхардлыг шалгаж анхааруулна
-  const examInp = $('#r-examnum');
-  if (examInp && !examInp.dataset.dupBound) {
-    examInp.dataset.dupBound = '1';
-    examInp.addEventListener('blur', () => {
-      const v = examInp.value.trim();
-      if (!v) { examInp.style.borderColor = ''; return; }
-      const dup = findExamNumDuplicate(v);
-      if (dup) {
-        examInp.style.borderColor = 'var(--red)';
-        const who = dup.rec.horse || dup.rec.name || '';
-        toast('⚠️ ' + v + ' дугаар аль хэдийн ашиглагдсан' + (who ? ' (' + who + ')' : ''), 'err');
-      } else {
-        examInp.style.borderColor = '';
-      }
-    });
-    examInp.addEventListener('input', () => { examInp.style.borderColor = ''; });
-  }
-  // Утас бичээд гарахад өмнөх эзний мэдээллийг бөглөнө
-  const phoneInp = $('#r-phone');
-  if (phoneInp && !phoneInp.dataset.lookupBound) {
-    phoneInp.dataset.lookupBound = '1';
-    phoneInp.addEventListener('blur', () => autoFillOwnerByPhone());
+  window.p1OriginalRegistrationReady?.();
+  const searchContactsButton = $('#r-api-search-contacts');
+  if (searchContactsButton && !searchContactsButton.dataset.bound) {
+    searchContactsButton.dataset.bound = '1';
+    searchContactsButton.addEventListener('click', searchRegistrationContacts);
   }
 }
 
@@ -2651,8 +2659,12 @@ function examNumMax(withRec) {
 function formatExamNum(v) { const cfg = examNumCfg(); return (cfg.prefix || '') + String(v).padStart(cfg.pad || 0, '0'); }
 function nextExamNum() { return formatExamNum(examNumMax() + 1); }
 function autoFillExamNum() {
-  $('#r-examnum').value = nextExamNum();
-  if ($('#r-examnum')) $('#r-examnum').placeholder = 'ж: ' + nextExamNum();
+  const input = $('#r-examnum');
+  if (!input) return;
+  input.value = '';
+  input.placeholder = window.p1ClinicalApi?.connected
+    ? 'Assigned when the visit is saved'
+    : 'Connect to the Clinical API to register a visit';
 }
 function saveExamNumCfg(patch) {
   STATE.examNumCfg = Object.assign({}, examNumCfg(), patch || {});
@@ -2730,7 +2742,11 @@ function findExamNumDuplicate(examNum, excludeId) {
 }
 
 function clearReg() {
-  ['r-name','r-age','r-breed','r-mark','r-owner','r-phone','r-phone2','r-soum','r-symp','r-extra','r-iabd'].forEach(id => { const el = $('#'+id); if (el) el.value = ''; });
+  ['r-name','r-age','r-breed','r-mark','r-owner','r-phone','r-phone2','r-soum','r-symp','r-extra','r-iabd',
+    'r-representative','r-representative-phone','r-payer','r-payer-phone'].forEach(id => { const el = $('#'+id); if (el) el.value = ''; });
+  ['r-api-owner-match','r-api-rep-match','r-api-payer-match'].forEach(id => { const el = $('#'+id); if (el) el.replaceChildren(new Option('No existing contact selected', '')); });
+  $('#r-api-horse-match').replaceChildren(new Option('Select only after reviewing the candidate', ''));
+  $('#r-api-horse-review').hidden = true;
   $('#r-prov').value = '';
   $('#r-urg').value = 'green';
   $('#r-date').value = todayStr();
@@ -2738,64 +2754,90 @@ function clearReg() {
 }
 
 async function submitReg() {
+  const api = window.p1ClinicalApi;
+  if (!api?.connected) {
+    toast('Connect the P1 Clinical API session from the dashboard before registering.', 'err');
+    return;
+  }
   const name = $('#r-name').value.trim();
+  const selectedHorseId = $('#r-api-horse-match')?.value || '';
   const owner = $('#r-owner').value.trim();
   const phone = $('#r-phone').value.trim();
   const symp = $('#r-symp').value.trim();
-  const examNum = $('#r-examnum').value.trim();
-  if (!examNum) {
-    toast('Үзлэгийн хуудасны дугаар оруулна уу', 'err');
+  if ((!name && !selectedHorseId) || !owner || !phone || !symp) {
+    toast('Enter the horse name, owner name, phone number and symptoms.', 'err');
     return;
   }
-  const dup = findExamNumDuplicate(examNum) || await findExamNumDuplicateRemote(examNum);
-  if (dup) {
-    const who = dup.rec.horse || dup.rec.name || '';
-    toast('⚠️ ' + examNum + ' дугаар аль хэдийн ашиглагдсан байна' + (who ? ' (' + who + ')' : ''), 'err');
+  const required = [selectedHorseId ? 'registry.read' : 'registry.create', 'contact.read', 'party.create', 'reception.create', 'reception.link', 'visit.create'];
+  const missing = required.filter(permission => !api.can(permission));
+  if (missing.length) {
+    toast('The P1 session is missing: ' + missing.join(', '), 'err');
     return;
   }
-  if (!name || !owner || !phone || !symp) {
-    toast('Шаардлагатай талбар дутуу байна', 'err');
-    return;
-  }
-  const horse = {
-    id: uid(),
-    name, owner, phone,
-    phone2: $('#r-phone2').value.trim(),
-    iabd: ($('#r-iabd') ? $('#r-iabd').value.trim() : ''), // Ирсэн адууны бүртгэлийн дугаар
-    age: $('#r-age').value,
-    breed: $('#r-breed').value.trim(),
-    mark: $('#r-mark').value.trim(),
-    province: $('#r-prov').value,
-    soum: $('#r-soum').value.trim(),
-    date: $('#r-date').value || todayStr(),
-    extra: $('#r-extra').value.trim(),
-    createdAt: nowMs(),
-    // ⚠️ ms заавал хэрэгтэй: sync-ийн merge нь ms-ээр "хэн нь шинэ вэ" гэдгийг шийддэг.
-    // Урьд нь ms байгаагүйгээс өөр төхөөрөмжийн ХУУЧИН хуулбар локалыг дарж,
-    // ИАБД зэрэг талбар устдаг байсан.
-    ms: nowMs()
+  const parties = [];
+  const addParty = (role, nameValue, phoneValue, selectId) => {
+    const displayName = nameValue.trim();
+    const contactId = $('#' + selectId)?.value || '';
+    if (!displayName && !contactId) return;
+    parties.push(contactId ? { role, contact_id: contactId } : {
+      role, display_name: displayName, phone: phoneValue.trim(),
+    });
   };
-  STATE.horses.push(horse);
-  const wait = {
-    id: uid(),
-    horseId: horse.id,
-    horse: name, owner, phone,
-    symptoms: symp,
-    urgency: $('#r-urg').value,
-    examNum: examNum,
-    ms: nowMs(),
-    age: horse.age, breed: horse.breed, province: horse.province, soum: horse.soum
-  };
-  STATE.waiting.push(wait);
-  saveAll();
-  // ⚡ Зөвхөн өөрчлөгдсөн record-уудыг бичнэ
-  fbSaveRecord('horses', horse);
-  fbSaveRecord('waiting', wait);
-  writeLog('Морь бүртгэсэн', horse.id, horse.name + ' / ' + horse.owner, 'Дугаар: ' + examNum, examNum);
-  toast('✅ Адуу амжилттай бүртгэгдлээ (' + examNum + ')', 'ok');
-  clearReg();
-  updateBadges();
-  nav('waiting');
+  addParty('owner', owner, phone, 'r-api-owner-match');
+  addParty('representative', $('#r-representative').value, $('#r-representative-phone').value, 'r-api-rep-match');
+  addParty('payer', $('#r-payer').value, $('#r-payer-phone').value, 'r-api-payer-match');
+  if (parties.some(party => !party.contact_id) && !api.can('contact.create')) {
+    toast('The P1 session needs contact.create to add a new owner, representative or payer. Search and select an existing contact, or request that permission.', 'err');
+    return;
+  }
+  const urgency = { green: 'Normal', yellow: 'Attention', red: 'Urgent' }[$('#r-urg').value] || 'Normal';
+  const summary = [
+    `Symptoms: ${symp}`,
+    `Urgency: ${urgency}`,
+    $('#r-age').value ? `Age reported: ${$('#r-age').value}` : '',
+    $('#r-phone2').value.trim() ? `Additional phone: ${$('#r-phone2').value.trim()}` : '',
+    $('#r-prov').value ? `Province: ${$('#r-prov').value}` : '',
+    $('#r-soum').value.trim() ? `District: ${$('#r-soum').value.trim()}` : '',
+    $('#r-mark').value.trim() ? `Markings/classification: ${$('#r-mark').value.trim()}` : '',
+    $('#r-date').value ? `Date entered: ${$('#r-date').value}` : '',
+    $('#r-extra').value.trim() ? `Additional notes: ${$('#r-extra').value.trim()}` : '',
+  ].filter(Boolean).join('\n');
+  const identifiers = $('#r-iabd').value.trim()
+    ? [{ type: 'iabd', value: $('#r-iabd').value.trim() }]
+    : [];
+  const button = $('#r-submit');
+  if (button) button.disabled = true;
+  try {
+    const payload = {
+      parties, phone, summary,
+    };
+    if (selectedHorseId) payload.horse_id = selectedHorseId;
+    else payload.horse = { name, breed: $('#r-breed').value.trim(), identifiers };
+    const result = await api.registerIntake(payload);
+    clearReg();
+    $('#r-examnum').value = result.visit.slip_number;
+    $('#r-api-status').textContent = `Registered ${result.horse.name}; visit ${result.visit.slip_number} was assigned by the Clinical API.`;
+    $('#r-api-status').className = 'p1-inline-status ok';
+    toast(`Horse and visit registered · ${result.visit.slip_number}`, 'ok');
+    nav('waiting');
+  } catch (error) {
+    const candidates = error.payload?.error?.details?.candidates || [];
+    const candidateNames = candidates.map(candidate => candidate.name).filter(Boolean);
+    if (candidates.length) {
+      const select = $('#r-api-horse-match');
+      select.replaceChildren(new Option('Select the horse confirmed by staff', ''));
+      for (const candidate of candidates) select.add(new Option(candidate.name, candidate.id));
+      $('#r-api-horse-review').hidden = false;
+    }
+    const message = candidates.length
+      ? `Possible duplicate horse. Review the candidates and select the correct existing record, or clear the selection to create a new record: ${candidateNames.join(', ')}`
+      : error.message || 'The Clinical API could not complete registration.';
+    $('#r-api-status').textContent = message;
+    $('#r-api-status').className = 'p1-inline-status warn';
+    toast(message, 'err');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 // ============================================================

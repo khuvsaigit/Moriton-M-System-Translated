@@ -11,7 +11,7 @@
    ⚠️ Update APP_VERSION below with every release to purge stale cache.
    ============================================================ */
 
-const APP_VERSION = '20261119';
+const APP_VERSION = '20261120-r3';
 
 const SHELL_CACHE = 'moriton-shell-' + APP_VERSION;
 const ASSET_CACHE = 'moriton-assets-v1';

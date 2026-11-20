@@ -305,7 +305,11 @@ input, select, textarea {
 .p1-api-note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
 .p1-api-identity { font-size: 12px; overflow-wrap: anywhere; }
 .p1-api-status { min-height: 20px; margin-top: 6px; font-size: 12px; }
+.p1-inline-status { padding: 10px 12px; border-radius: 9px; color: var(--muted); background: var(--input); font-size: 12px; line-height: 1.45; }
+.p1-inline-status.ok { color: var(--green); background: var(--green-soft); }
+.p1-inline-status.warn { color: var(--orange-dark); background: var(--orange-soft); }
 .p1-mobile-nav { display: none; }
+.wb-grid.single-column { grid-template-columns: minmax(0,1fr); }
 .p1-workflows { display: contents; }
 .p1-workflows [hidden] { display: none !important; }
 body.p1-active #bn { display: none !important; }

@@ -54,6 +54,40 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/ContactInput'}
       responses: {'201': {description: Contact recorded with audit}, '403': {description: Local prototype unavailable}}
+  /registration-intakes:
+    post:
+      operationId: registerHorseAndVisitFromOriginalUI
+      security: [{sessionAuth: []}]
+      description: Local prototype only. Creates a new horse or links a staff-selected existing horse, explicitly selected or new party contacts, role links, reception history and a server-numbered visit in one transaction. It does not infer identity from shared phone numbers. Requires contact.read, party.create, reception.create, reception.link and visit.create, plus registry.create for a new horse or registry.read for a selected horse. contact.create is needed when a new contact is supplied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parties, summary]
+              properties:
+                horse: {$ref: '#/components/schemas/HorseCreate'}
+                horse_id: {type: string, format: uuid}
+                parties:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [role]
+                    properties:
+                      role: {type: string, enum: [owner, representative, payer]}
+                      contact_id: {type: string, format: uuid}
+                      display_name: {type: string, maxLength: 200}
+                      phone: {type: string, maxLength: 32}
+                      email: {type: string, format: email}
+                phone: {type: string, maxLength: 32}
+                summary: {type: string}
+      responses:
+        '201': {description: 'Horse, party links, reception task and server-numbered visit created atomically'}
+        '400': {description: Invalid intake fields}
+        '403': {description: A required permission is missing or local prototype is disabled}
+        '409': {description: Possible duplicate horse with staff-review candidates}
   /horses/{horse_id}/parties:
     parameters: [{in: path, name: horse_id, required: true, schema: {type: string, format: uuid}}]
     get:
@@ -89,6 +123,29 @@ paths:
         - {$ref: '#/components/parameters/WindowStart'}
         - {$ref: '#/components/parameters/WindowEnd'}
       responses: {'200': {description: 'Scoped recorded practitioners, shifts, qualifications and resources with explicit limits; no workload score or eligibility inference'}}
+  /roster/practitioners:
+    post:
+      operationId: createLocalRosterPractitioner
+      security: [{sessionAuth: []}]
+      description: Local prototype only; roster.manage required. Records a practitioner in the active branch with an audit event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [display_name], properties: {display_name: {type: string, maxLength: 200}}}
+      responses: {'201': {description: Practitioner recorded}, '403': {description: Local prototype unavailable or permission missing}}
+  /roster/practitioners/{practitioner_id}/entries:
+    post:
+      operationId: createLocalRosterQualificationOrShift
+      security: [{sessionAuth: []}]
+      parameters: [{in: path, name: practitioner_id, required: true, schema: {type: string, format: uuid}}]
+      description: Local prototype only; roster.manage required. Records a qualification or duty shift with audit. Qualification and assignment eligibility rules remain pending client approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [kind], properties: {kind: {type: string, enum: [qualification, shift]}, code: {type: string}, valid_from: {type: string, format: date-time}, valid_until: {type: string, format: date-time}, starts_at: {type: string, format: date-time}, ends_at: {type: string, format: date-time}}}
+      responses: {'201': {description: Qualification or shift recorded}, '400': {description: Invalid entry}, '403': {description: Local prototype unavailable or permission missing}, '404': {description: Practitioner not found}}
   /health/live:
     get:
       operationId: clinicalLiveness

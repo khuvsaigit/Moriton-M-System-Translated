@@ -23,17 +23,20 @@ from registry.api import (
 from registry.dev_auth import LocalCsrfView, LocalDemoScheduleResourceView, LocalMockSessionView
 from registry.internal_events import LocalCall24EventView
 from registry.release_api import (
-    AuditListView, ContactListView, CurrentBranchView, CurrentSessionView,
-    HorsePartiesView, RosterReadView,
+    AuditListView, ContactListView, CurrentBranchView, CurrentSessionView, RegistrationIntakeCreateView,
+    HorsePartiesView, RosterEntryCreateView, RosterPractitionerCreateView, RosterReadView,
 )
 
 urlpatterns = [
     path("api/v1/session", CurrentSessionView.as_view()),
     path("api/v1/branches/current", CurrentBranchView.as_view()),
     path("api/v1/contacts", ContactListView.as_view()),
+    path("api/v1/registration-intakes", RegistrationIntakeCreateView.as_view()),
     path("api/v1/horses/<uuid:horse_id>/parties", HorsePartiesView.as_view()),
     path("api/v1/audit-events", AuditListView.as_view()),
     path("api/v1/roster", RosterReadView.as_view()),
+    path("api/v1/roster/practitioners", RosterPractitionerCreateView.as_view()),
+    path("api/v1/roster/practitioners/<uuid:practitioner_id>/entries", RosterEntryCreateView.as_view()),
     path("api/v1/health/live", HealthView.as_view()),
     path("api/v1/health/ready", ReadyView.as_view()),
     path("api/v1/horses", HorseListCreateView.as_view()),

@@ -475,8 +475,20 @@ class VisitListCreateView(APIView):
         scope = _scope(request, "visit.read")
         with scoped_atomic(scope.organization_id, scope.branch_id):
             visits = Visit.objects.filter(organization_id=scope.organization_id,
-                                          branch_id=scope.branch_id).order_by("-created_at")[:100]
-            items = [_visit_json(visit) for visit in visits]
+                                          branch_id=scope.branch_id).select_related("horse").prefetch_related(
+                                              "reception_tasks", "horse__party_roles__contact",
+                                          ).order_by("-created_at")[:100]
+            items = []
+            for visit in visits:
+                item = _visit_json(visit)
+                item["horse"] = _horse_json(visit.horse)
+                tasks = list(visit.reception_tasks.order_by("-created_at")[:1])
+                task = tasks[0] if tasks else None
+                owner = visit.horse.party_roles.filter(role="owner", valid_to__isnull=True).select_related("contact").order_by("-valid_from").first()
+                item["owner"] = {"display_name": owner.contact.display_name,
+                                 "phone": owner.contact.normalized_phone} if owner else None
+                item["reception"] = _task_json(task) if task else None
+                items.append(item)
         return Response({"items": items, "next": None})
 
     def post(self, request):

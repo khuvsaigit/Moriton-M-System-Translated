@@ -14,7 +14,7 @@
 <!-- ============================================================
      PWA — суулгаж болох програм болгох (manifest + icon)
      ============================================================ -->
-<link rel="manifest" href="manifest.json?v=20261119">
+<link rel="manifest" href="manifest.json?v=20261120-r3">
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -29,10 +29,10 @@
      ⚠️ Доорх firebaseConfig-ийг ӨӨРИЙН project-ийн утгаар СОЛИНО.
         Firebase Console → Project settings → Your apps → Web app
      ============================================================ -->
-<script type="module" src="firebase.js?v=20261119"></script>
+<script type="module" src="firebase.js?v=20261120-r3"></script>
 
-<link rel="stylesheet" href="style.css?v=20261119">
-<link rel="stylesheet" href="backend-workbench.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261120-r3">
+<link rel="stylesheet" href="backend-workbench.css?v=20261120-r3">
 </head>
 <body>
 
@@ -238,12 +238,11 @@
             <button type="button" class="btn" id="bkd-arrive" disabled>Record arrival</button>
           </div>
           <div id="bkd-result" role="status" aria-live="polite" style="font-size:12px;margin-top:10px;color:var(--muted)">Open this dashboard with ?backendDemo=1 to show this panel.</div>
-          <p style="font-size:13px;margin-top:12px"><a href="backend-workbench.html">Open local branch, intake, audit and appointment workbench</a></p>
         </div>
 
         <div class="card p1-session-card" id="p1-connect-card">
           <div class="ch">P1 services · R1–R3 <span class="ch-r" id="p1-api-state">Not connected</span></div>
-          <div class="p1-api-note">Connect to the local Clinical API. P1 pages and actions are provided by the API session permissions, separately from this legacy Firebase session. Use synthetic data only.</div>
+          <div class="p1-api-note">Connect the local Clinical API. R1–R3 actions in this shell use this session’s server permissions. The older application login is still separate; use synthetic data only.</div>
           <div class="fg r2 p1-api-connection">
             <div class="fld"><label for="p1-api-base">Local Clinical API origin</label><input class="inp" id="p1-api-base" value="http://localhost:8001" autocomplete="off" spellcheck="false"></div>
             <div class="fld p1-api-action"><label>&nbsp;</label><button type="button" class="btn btn-p" id="p1-connect">Connect P1 session</button></div>
@@ -285,20 +284,17 @@
         <div class="ph">
           <div class="ph-l">
             <div class="ph-title">🐴 Horse registration</div>
-            <div class="ph-sub">Шинэ адуу болон эзний мэдээлэл</div>
+            <div class="ph-sub">Register a horse, record its owner and visit details</div>
           </div>
         </div>
+        <div id="r-api-status" class="p1-inline-status" role="status" aria-live="polite">Connect a P1 Clinical API session from the dashboard to register horses and visits.</div>
 
         <div class="card" style="border:2px solid var(--orange);background:var(--orange-soft)">
           <div class="ch">🔢 Visit slip number</div>
           <div class="fg r2">
             <div class="fld">
-              <label>Number <span class="req">*</span></label>
-              <input class="inp" id="r-examnum" placeholder="e.g. 090311" inputmode="numeric" style="font-weight:800;font-size:16px;letter-spacing:0.5px">
-            </div>
-            <div class="fld" style="justify-content:flex-end">
-              <label>&nbsp;</label>
-              <button type="button" class="btn btn-sm" onclick="autoFillExamNum()">↻ Automatic</button>
+              <label>Assigned by the Clinical API after registration</label>
+              <input class="inp" id="r-examnum" placeholder="Assigned when the visit is saved" readonly style="font-weight:800;font-size:16px;letter-spacing:0.5px">
             </div>
           </div>
         </div>
@@ -306,14 +302,18 @@
         <div class="card">
           <div class="ch">🐴 Horse details</div>
           <div class="fg r3">
-            <div class="fld"><label>Coat / Name <span class="req">*</span></label><input class="inp" id="r-name" placeholder="ж: Хээр халтар"></div>
+            <div class="fld"><label>Coat / Name <span class="req">*</span></label><input class="inp" id="r-name" placeholder="e.g. Dark bay"></div>
             <div class="fld"><label>Age</label><input class="inp" type="number" id="r-age" placeholder="0" min="0" max="40"></div>
-            <div class="fld"><label>Breed</label><input class="inp" id="r-breed" placeholder="ж: Монгол"></div>
+            <div class="fld"><label>Breed</label><input class="inp" id="r-breed" placeholder="e.g. Mongolian"></div>
           </div>
           <div class="fg r3">
-            <div class="fld"><label>Horse visit record number <span style="font-weight:400;color:var(--muted,#999);font-size:11px">(Horse visit record number)</span></label><input class="inp" id="r-iabd" placeholder="e.g. VISIT-12345"></div>
-            <div class="fld"><label>Markings</label><input class="inp" id="r-mark" placeholder="Эм / Соёо / Бусад"></div>
+            <div class="fld"><label>Horse registration identifier</label><input class="inp" id="r-iabd" placeholder="Enter an existing identifier, if available"></div>
+            <div class="fld"><label>Markings / sex / teeth</label><input class="inp" id="r-mark" placeholder="Add recorded markings or classification"></div>
             <div class="fld"><label>Date</label><input class="inp" type="date" id="r-date"></div>
+          </div>
+          <div class="fg r2" id="r-api-horse-review" hidden>
+            <div class="fld"><label for="r-api-horse-match">Possible existing horses (review and select manually)</label><select class="inp" id="r-api-horse-match"><option value="">Select only after reviewing the candidate</option></select></div>
+            <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><span class="muted">Submit again to register a visit for the selected horse.</span></div>
           </div>
         </div>
 
@@ -331,6 +331,16 @@
               </select>
             </div>
             <div class="fld"><label>District</label><input class="inp" id="r-soum"></div>
+          </div>
+          <div class="fg r2" id="r-api-contact-match" hidden>
+            <div class="fld"><label for="r-api-owner-match">Possible existing owner contacts (review and select manually)</label><select class="inp" id="r-api-owner-match"><option value="">No existing contact selected</option></select></div>
+            <div class="fld" style="justify-content:flex-end"><label>&nbsp;</label><button type="button" class="btn btn-sm" id="r-api-search-contacts">Search contacts</button></div>
+            <div class="fld"><label>Representative name (optional)</label><input class="inp" id="r-representative"></div>
+            <div class="fld"><label>Representative phone</label><input class="inp" id="r-representative-phone" inputmode="tel"></div>
+            <div class="fld"><label>Possible existing representative contact</label><select class="inp" id="r-api-rep-match"><option value="">No existing contact selected</option></select></div>
+            <div class="fld"><label>Payer name (optional)</label><input class="inp" id="r-payer"></div>
+            <div class="fld"><label>Payer phone</label><input class="inp" id="r-payer-phone" inputmode="tel"></div>
+            <div class="fld"><label>Possible existing payer contact</label><select class="inp" id="r-api-payer-match"><option value="">No existing contact selected</option></select></div>
           </div>
         </div>
 
@@ -353,7 +363,7 @@
           </div>
           <div class="row" style="justify-content:flex-end;margin-top:8px">
             <button class="btn" onclick="clearReg()">🔄 Clear</button>
-            <button class="btn btn-p" onclick="submitReg()">✅ Register and add to waiting room</button>
+            <button class="btn btn-p" id="r-submit" onclick="submitReg()">✅ Register horse and visit</button>
           </div>
         </div>
       </section>
@@ -368,6 +378,17 @@
           <div class="ph-r"><button class="btn btn-p btn-sm" onclick="nav('register')">+ Register</button></div>
         </div>
 
+        <div class="card" id="api-waiting-area" hidden>
+          <div class="ch">Clinical API visits <span class="ch-r" id="api-visit-count">0</span></div>
+          <p class="muted" id="api-waiting-status">Visits registered through the Clinical API appear here.</p>
+          <div class="row" style="justify-content:flex-end;margin:8px 0"><button type="button" class="btn btn-sm btn-p" id="api-refresh-visits">Refresh visits</button></div>
+          <div id="api-visit-records" class="wb-table-wrap"></div>
+          <div class="ch" style="margin-top:16px">Reception requests <span class="ch-r" id="api-reception-count">0</span></div>
+          <p class="muted">Unlinked Messenger/Call24 requests can be reviewed here after the approved integration delivers them.</p>
+          <div id="api-reception-records" class="wb-table-wrap"></div>
+        </div>
+
+        <div id="legacy-waiting-view">
         <div class="card">
           <div class="ch">📋 List <span class="ch-r" id="w-cnt">0</span></div>
           <div class="w-scroll">
@@ -387,6 +408,7 @@
             <button class="btn btn-r btn-sm" onclick="removeWaiting()">✕ Remove</button>
             <button class="btn btn-p" onclick="startExamFromWaiting()">🩺 Start examination</button>
           </div>
+        </div>
         </div>
       </section>
 
@@ -1403,8 +1425,6 @@
 
       </div>
 
-      <div id="p1-status" class="wb-status" role="status" aria-live="polite"></div>
-
       <section class="page wb-page" id="branch" hidden>
         <div class="ph"><div class="ph-l"><div class="ph-title">Current branch</div>
           <div class="ph-sub">Profile metadata for the branch already authorized by your session.</div></div></div>
@@ -1417,52 +1437,14 @@
         </div>
       </section>
 
-      <section class="page wb-page" id="intake" hidden>
-        <div class="ph"><div class="ph-l"><div class="ph-title">Horse registration and reception</div>
-          <div class="ph-sub">Create synthetic horse and contact records, record party roles, and handle a manually received enquiry.</div></div></div>
-        <div class="card wb-warning"><div class="ch">Identity and intake rules</div>
-          <p>Owner, representative and payer are separate roles. Similar names or shared phone numbers require staff review. Microchip and final registration numbering rules remain pending client approval.</p></div>
-        <div class="wb-grid">
-          <div class="card"><div class="ch">Horse records</div>
-            <form id="horse-form" class="fg wb-form"><div class="fld"><label>Horse description or name</label><input class="inp" name="name" required maxlength="160"></div>
-              <div class="fld"><label>Brand / tamga</label><input class="inp" name="tamga" maxlength="120"></div>
-              <div class="wb-form-actions"><button class="btn btn-p" type="submit">Create horse</button></div></form>
-            <div id="horses" class="wb-table-wrap"></div>
-          </div>
-          <div class="card"><div class="ch">Contacts</div>
-            <form id="contact-form" class="fg wb-form"><div class="fld"><label>Contact name</label><input class="inp" name="display_name" required maxlength="200"></div>
-              <div class="fld"><label>Phone</label><input class="inp" name="phone" maxlength="32"></div>
-              <div class="fld"><label>Email</label><input class="inp" name="email" type="email"></div>
-              <div class="wb-form-actions"><button class="btn btn-p" type="submit">Create contact</button></div></form>
-            <div id="contacts" class="wb-table-wrap"></div>
-          </div>
-        </div>
-        <div class="card"><div class="ch">Owner, representative or payer</div>
-          <p class="muted">Party roles are effective-dated. This workbench does not infer a match from a phone number.</p>
-          <form id="party-form" class="fg r2 wb-form"><div class="fld"><label>Horse</label><select class="inp" name="horse_id" data-horses required></select></div>
-            <div class="fld"><label>Contact</label><select class="inp" id="party-contact" name="contact_id" required></select></div>
-            <div class="fld"><label>Role</label><select class="inp" name="role"><option value="owner">Owner</option><option value="representative">Representative</option><option value="payer">Payer</option></select></div>
-            <div class="fld"><label>Effective from</label><input class="inp" name="valid_from" type="datetime-local" required></div>
-            <div class="wb-form-actions wb-inline-actions"><button class="btn btn-p" type="submit">Record role</button>
-              <button class="btn" id="load-parties" type="button">View party history</button></div></form>
-          <div id="parties" class="wb-table-wrap"></div>
-        </div>
-        <div class="card"><div class="ch">Manual reception enquiry</div>
-          <p class="muted">For staff-entered enquiries, including information received through Messenger. This is not an automated Messenger connection.</p>
-          <form id="reception-form" class="fg r2 wb-form"><div class="fld"><label>Caller name</label><input class="inp" name="customer_name" maxlength="200"></div>
-            <div class="fld"><label>Phone</label><input class="inp" name="phone" maxlength="32"></div>
-            <div class="fld wb-span-all"><label>Enquiry summary</label><textarea class="inp" name="summary" required></textarea></div>
-            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Save manual enquiry</button></div></form>
-          <div class="fld wb-horse-link"><label>Horse confirmed by staff for the selected enquiry</label><select class="inp" id="reception-horse" data-horses></select></div>
-          <div id="reception" class="wb-table-wrap"></div><p id="visit-result" class="wb-result" role="status"></p>
-        </div>
-      </section>
+
 
       <section class="page wb-page" id="appointments" hidden>
         <div class="ph"><div class="ph-l"><div class="ph-title">Appointments and roster</div>
           <div class="ph-sub">Review the schedule, appointment state, practitioner qualifications and recorded shifts.</div></div></div>
         <div class="card wb-warning"><div class="ch">Prototype behavior</div>
           <p>Read windows are limited to 31 days. Local rescheduling requires a reason and returns the appointment to Requested for fresh confirmation. Client booking, qualification and workload rules remain pending.</p></div>
+        <div id="schedule-status" class="p1-api-status" role="status" aria-live="polite"></div>
         <div class="card"><div class="ch">Schedule window</div>
           <form id="window-form" class="fg r2 wb-form"><div class="fld"><label>Window start</label><input class="inp" id="window-start" type="datetime-local" required></div>
             <div class="fld"><label>Window end</label><input class="inp" id="window-end" type="datetime-local" required></div>
@@ -1488,14 +1470,29 @@
             <div class="fld"><label>New end</label><input class="inp" id="new-end" type="datetime-local"></div></div>
         </div><div id="appointment-records" class="wb-table-wrap"></div></div>
         <div class="card"><div class="ch">Roster and qualification records</div>
-          <p class="muted">Recorded shifts and qualifications only. No workload score or clinical eligibility decision is inferred.</p>
+          <p class="muted">Qualifications and shifts are recorded for the authorized branch. Assignment currently does not enforce service-specific eligibility; that rule needs client approval.</p>
           <div id="roster-records" class="wb-table-wrap"></div></div>
+        <div class="card" id="roster-admin-area" hidden><div class="ch">Manage local roster</div>
+          <p class="muted">Local prototype only. Add the approved practitioner list, qualification records, and duty shifts for this branch.</p>
+          <form id="roster-practitioner-form" class="fg r2 wb-form"><div class="fld"><label>Practitioner name</label><input class="inp" name="display_name" required maxlength="200"></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Add practitioner</button></div></form>
+          <form id="roster-qualification-form" class="fg r3 wb-form"><div class="fld"><label>Practitioner</label><select class="inp" name="practitioner_id" id="roster-qual-practitioner" required></select></div>
+            <div class="fld"><label>Qualification code</label><input class="inp" name="code" required maxlength="80"></div>
+            <div class="fld"><label>Valid from</label><input class="inp" name="valid_from" type="datetime-local" required></div>
+            <div class="fld"><label>Valid until (optional)</label><input class="inp" name="valid_until" type="datetime-local"></div>
+            <div class="wb-form-actions"><button class="btn" type="submit">Record qualification</button></div></form>
+          <form id="roster-shift-form" class="fg r3 wb-form"><div class="fld"><label>Practitioner</label><select class="inp" name="practitioner_id" id="roster-shift-practitioner" required></select></div>
+            <div class="fld"><label>Shift starts</label><input class="inp" name="starts_at" type="datetime-local" required></div>
+            <div class="fld"><label>Shift ends</label><input class="inp" name="ends_at" type="datetime-local" required></div>
+            <div class="wb-form-actions"><button class="btn" type="submit">Record duty shift</button></div></form>
+        </div>
       </section>
 
       <section class="page wb-page" id="audit" hidden>
         <div class="ph"><div class="ph-l"><div class="ph-title">Audit history</div>
           <div class="ph-sub">Search the current authorized branch’s application audit records.</div></div></div>
         <div class="card"><div class="ch">Search audit events</div>
+          <div id="audit-status" class="p1-api-status" role="status" aria-live="polite"></div>
           <form id="audit-form" class="fg r3 wb-form"><div class="fld"><label>Action</label><input class="inp" name="action" placeholder="appointment.rescheduled"></div>
             <div class="fld"><label>Record type</label><input class="inp" name="aggregate_type" placeholder="horse"></div>
             <div class="fld"><label>Record UUID</label><input class="inp" name="aggregate_id"></div>
@@ -1963,15 +1960,15 @@
 
 <div id="print-area"></div>
 
-<script src="app.js?v=20261119"></script>
-<script src="lab.js?v=20261119"></script>
-<script src="pharmacy.js?v=20261119"></script>
-<script src="timesheet.js?v=20261119"></script>
-<script src="dailyreport.js?v=20261119"></script>
-<script src="dashboard-backend-demo.js?v=20261119"></script>
-<script type="module" src="p1-ui.mjs?v=20261119"></script>
+<script src="app.js?v=20261120-r3"></script>
+<script src="lab.js?v=20261120-r3"></script>
+<script src="pharmacy.js?v=20261120-r3"></script>
+<script src="timesheet.js?v=20261120-r3"></script>
+<script src="dailyreport.js?v=20261120-r3"></script>
+<script src="dashboard-backend-demo.js?v=20261120-r3"></script>
+<script type="module" src="p1-ui.mjs?v=20261120-r3"></script>
 
 <!-- PWA: service worker бүртгэх, автомат шинэчлэлт, суулгах товч -->
-<script src="pwa.js?v=20261119"></script>
+<script src="pwa.js?v=20261120-r3"></script>
 </body>
 </html>

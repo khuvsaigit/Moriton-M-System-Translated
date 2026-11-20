@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .models import (
@@ -9,6 +9,7 @@ from .models import (
     ClinicalNoteRevision,
     Contact,
     InboxReceipt,
+    Practitioner,
     ReceptionTask,
     ReceptionTaskHistory,
     ServiceMembership,
@@ -161,6 +162,7 @@ class R1VerticalSliceApiTests(TestCase):
             "registry.read", "registry.create", "reception.read", "reception.create",
             "reception.assign", "reception.link", "reception.resolve", "visit.read",
             "visit.create", "visit.arrive", "visit.assign", "clinical_note.draft.write",
+            "contact.read", "contact.create", "party.create", "roster.read", "roster.manage",
         ]
         ServiceMembership.objects.create(
             organization_id=self.organization_id, branch_id=self.branch_id,
@@ -243,8 +245,10 @@ class R1VerticalSliceApiTests(TestCase):
         self.assertEqual(arrival.status_code, 200, arrival.data)
         self.assertEqual(arrival.data["status"], Visit.Status.ARRIVED)
 
+        practitioner = Practitioner.objects.create(organization_id=self.organization_id,
+            branch_id=self.branch_id, created_by=self.actor_id, display_name="Synthetic Vet")
         assignment = self.client.post(f"/api/v1/visits/{visit_id}/assignments", {
-            "practitioner_id": str(uuid4()), "reason": "Synthetic assignment",
+            "practitioner_id": str(practitioner.id), "reason": "Synthetic assignment",
         }, format="json")
         self.assertEqual(assignment.status_code, 201, assignment.data)
         self.assertEqual(VisitAssignment.objects.filter(visit_id=visit_id).count(), 1)
@@ -261,3 +265,38 @@ class R1VerticalSliceApiTests(TestCase):
         self.assertEqual(revised.data["status"], "DRAFT")
         self.assertEqual(ClinicalNoteRevision.objects.filter(note_id=note_id).count(), 2)
         self.assertGreaterEqual(AuditEvent.objects.count(), 7)
+
+    @override_settings(DEBUG=True, MORITON_LOCAL_AUTH_ENABLED=True)
+    def test_registration_intake_is_atomic_and_visit_list_has_waiting_room_details(self):
+        response = self.client.post("/api/v1/registration-intakes", {
+            "horse": {"name": "Synthetic Intake Horse", "breed": "Test breed", "identifiers": []},
+            "parties": [{"role": "owner", "display_name": "Synthetic Owner", "phone": "0000000000"}],
+            "phone": "0000000000", "summary": "Synthetic intake summary",
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["visit"]["slip_number"], "000001")
+        listed = self.client.get("/api/v1/visits")
+        self.assertEqual(listed.status_code, 200)
+        visit = next(row for row in listed.data["items"] if row["id"] == response.data["visit"]["id"])
+        self.assertEqual(visit["horse"]["name"], "Synthetic Intake Horse")
+        self.assertEqual(visit["owner"]["display_name"], "Synthetic Owner")
+        self.assertIn("Synthetic intake summary", visit["reception"]["summary"])
+
+    @override_settings(DEBUG=True, MORITON_LOCAL_AUTH_ENABLED=True)
+    def test_roster_admin_records_practitioner_qualification_and_shift_with_audit(self):
+        created = self.client.post("/api/v1/roster/practitioners", {
+            "display_name": "Synthetic Roster Vet",
+        }, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        practitioner_id = created.data["id"]
+        qualification = self.client.post(f"/api/v1/roster/practitioners/{practitioner_id}/entries", {
+            "kind": "qualification", "code": "SYNTHETIC-QA",
+            "valid_from": "2026-11-20T00:00:00+00:00",
+        }, format="json")
+        self.assertEqual(qualification.status_code, 201, qualification.data)
+        shift = self.client.post(f"/api/v1/roster/practitioners/{practitioner_id}/entries", {
+            "kind": "shift", "starts_at": "2026-11-20T09:00:00+00:00",
+            "ends_at": "2026-11-20T17:00:00+00:00",
+        }, format="json")
+        self.assertEqual(shift.status_code, 201, shift.data)
+        self.assertEqual(AuditEvent.objects.filter(action__startswith="roster.").count(), 3)

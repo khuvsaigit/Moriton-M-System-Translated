@@ -12,22 +12,28 @@ The Clinical service has a provider-neutral server-side session bridge. Mock log
 
 ### Local frontend-to-backend demo
 
-The R1–R3 local workbench is at `http://localhost:5500/backend-workbench.html`.
-It now follows the legacy app's navy/gold shell, responsive sidebar/mobile
-navigation, page headings, cards, forms, tables and button styles by loading
-`style.css`. It remains a separate entry point and uses its own short-lived
-server session; it does not embed the Firebase login or Firebase data layer.
-It adds permission-based navigation, current-session/logout, current-branch profile
-metadata, contacts and effective-dated owner/representative/payer records, manual
-reception/link/visit actions, audit-history search/pagination, roster reads, and
-appointment request/confirm/arrival/cancel/reschedule. A link is also present in
-the dashboard's opted-in backend demo panel. It uses the local Clinical API only.
+The primary R1–R3 UI is now embedded in the original shell at `index.html`.
+Connect the separate, short-lived Clinical API session from the dashboard, then
+open the existing **Horse registration** page. Its existing form submits horse,
+owner/representative/payer roles, reception history and a server-numbered visit
+atomically to `POST /api/v1/registration-intakes`; it no longer writes those
+registration records to Firebase. The saved visit appears in the existing
+**Waiting room** page. The existing **Scheduled visits** page hosts API-backed
+appointments and roster views, while **History** hosts the scoped audit search.
+Branch profile is part of the original dashboard. Contact candidates are
+searched through the API and must be selected by staff. The original TEST/Firebase
+login only opens the legacy shell; it does not grant Clinical API permissions.
+
+`backend-workbench.html` remains available as a developer diagnostics page for
+branch metadata, schedule/roster, audit and endpoint exploration. It is not the
+primary registration interface and uses the same local Clinical API session
+bridge and permission checks.
 
 For a synthetic workbench identity, set `LOCAL_AUTH_PERMISSIONS` in the untracked
 local environment to the actions that identity should exercise, for example:
 
 ```dotenv
-LOCAL_AUTH_PERMISSIONS=branch.read,branch.manage,registry.read,registry.create,contact.read,contact.create,party.create,reception.read,reception.create,reception.link,visit.create,appointment.read,appointment.request,appointment.confirm,appointment.arrive,appointment.cancel,appointment.reschedule,roster.read,audit.read,demo.resource.create
+LOCAL_AUTH_PERMISSIONS=branch.read,branch.manage,registry.read,registry.create,contact.read,contact.create,party.create,reception.read,reception.create,reception.link,visit.read,visit.create,visit.arrive,visit.assign,appointment.read,appointment.request,appointment.confirm,appointment.arrive,appointment.cancel,appointment.reschedule,roster.read,roster.manage,audit.read,demo.resource.create
 ```
 
 Run migrations before opening the workbench. New branch profiles are labels for
@@ -36,10 +42,13 @@ create a new operational branch. Branch-profile, contact, party and appointment
 cancel/reschedule writes require both `DEBUG=1` and explicit local auth opt-in;
 they are unavailable in staging/production while client rules are pending.
 Rescheduling the local prototype clears confirmation and returns it to
-`REQUESTED`; the client must approve the production transition policy. Registry
+`REQUESTED`; the client must approve the production transition policy. Roster
+entries are local-only and service-specific qualification enforcement is not
+enabled until the client approves the qualification matrix. Registry
 numbering, microchip enforcement, master-data ownership, merges, consent rules,
-qualification enforcement and workload calculations are not finalized here.
-The workbench supplies no CSV import UI or live Messenger/Call24 connection.
+and workload calculations are not finalized here. Call24 CSV preview/import UI
+and live Messenger connectivity remain pending the approved CSV dictionary and
+an authenticated Integrations-service session.
 Raw audit API access requires `audit.read` in the current organization/branch.
 Cryptographic service assertion verification remains gated by the approved
 algorithm/key/rotation ADR; no production trust scheme was enabled.
@@ -51,7 +60,7 @@ DATABASE_URL=sqlite:////tmp/moriton-local-tests.sqlite3 backend/.venv/bin/python
 node backend/tests/test_workbench.mjs
 ```
 
-The legacy `index.html` application continues to use Firebase for its existing screens. An opt-in panel in the main dashboard now exercises the appointment API against localhost only; it creates synthetic horse and room records in the local Clinical database and does not read or write Firebase records. Open the dashboard with `?backendDemo=1` to reveal the panel. The standalone `backend-preview.html` remains available for registry, visit and pharmacy demonstrations.
+The legacy screens outside the R1–R3 integration continue to use Firebase. The original registration page now requires the local Clinical API session and only uses synthetic local backend data for that workflow. The standalone `backend-preview.html` remains available for registry, visit and pharmacy demonstrations.
 
 Set these values in the untracked `backend/.env` file for a throwaway local identity:
 

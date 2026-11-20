@@ -9,7 +9,6 @@ export function localApiBase(value) {
 
 const sections = [
   ['branch', 'Current branch', ['branch.read'], '🏢'],
-  ['intake', 'Registration and reception', ['registry.read', 'contact.read', 'reception.read'], '🐴'],
   ['appointments', 'Appointments and roster', ['appointment.read', 'roster.read'], '🗓️'],
   ['audit', 'Audit history', ['audit.read'], '📋'],
 ];
@@ -33,6 +32,7 @@ export function createClient(base, fetcher = globalThis.fetch) {
       if (!response.ok) {
         const error = new Error(data?.error?.message || data?.detail || JSON.stringify(data));
         error.status = response.status;
+        error.payload = data;
         throw error;
       }
       return data;
@@ -44,13 +44,24 @@ if (typeof document !== 'undefined') initialize();
 
 function initialize() {
   const $ = (id) => document.getElementById(id);
+  const placements = { branch: 'page-dashboard', appointments: 'page-planned', audit: 'page-history' };
+  for (const [id, target] of Object.entries(placements)) {
+    const area = $(id);
+    area.classList.remove('page', 'wb-page');
+    area.classList.add('p1-inline-area');
+    area.hidden = true;
+    $(target).prepend(area);
+  }
+  $('p1-connect-card').append($('p1-status'));
+  $('p1-mobile-nav').hidden = true;
+  for (const id of ['p1-nav-heading', 'p1-nav-list', 'p1-drawer-heading', 'p1-drawer-list']) $(id).hidden = true;
   let client, session, profile = null, cursor = null;
   const can = (permission) => session?.permissions.includes(permission);
   const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); return node; };
   function message(text, error = false) { $('p1-status').textContent = text; $('p1-status').className = error ? 'error' : 'ok'; }
   function clearSession() {
     session = null; profile = null; cursor = null;
-    activeSection = null;
+    window.p1ClinicalApi = null;
     $('p1-nav-list').replaceChildren(); $('p1-mobile-nav').replaceChildren();
     $('p1-drawer-list').replaceChildren();
     for (const id of ['p1-nav-heading', 'p1-nav-list', 'p1-drawer-heading', 'p1-drawer-list']) $(id).hidden = true;
@@ -58,17 +69,21 @@ function initialize() {
     $('p1-identity').textContent = 'No active local session.';
     $('p1-api-state').textContent = 'Not connected';
     $('p1-logout').disabled = true;
-    for (const [id] of sections) { $(id).hidden = true; $(id).classList.remove('active'); }
+    $('p1-connect').disabled = false;
+    restoreLegacyMenus();
+    for (const [id] of sections) $(id).hidden = true;
     $('workbench-home').hidden = true; $('workbench-home').classList.remove('active');
     $('p1-connect-card').hidden = false;
-    for (const id of ['horses', 'contacts', 'parties', 'reception', 'appointment-records', 'roster-records', 'audit-records']) $(id).replaceChildren();
-    for (const select of document.querySelectorAll('[data-horses],#party-contact,#appointment-resource')) select.replaceChildren();
-    for (const id of ['branch-form', 'horse-form', 'contact-form', 'party-form', 'reception-form']) $(id).reset();
-    $('branch-record').textContent = ''; $('visit-result').textContent = '';
+    for (const id of ['appointment-records', 'roster-records', 'audit-records']) $(id).replaceChildren();
+    $('api-visit-records').replaceChildren(); $('api-reception-records').replaceChildren(); $('api-waiting-area').hidden = true;
+    $('legacy-waiting-view').hidden = false;
+    for (const select of document.querySelectorAll('#appointment-resource')) select.replaceChildren();
+    for (const id of ['branch-form']) $(id).reset();
+    $('branch-record').textContent = '';
+    window.p1OriginalRegistrationReady?.();
   }
   window.p1Exit = () => {
     document.body.classList.remove('p1-active');
-    for (const [id] of sections) { $(id).hidden = true; $(id).classList.remove('active'); }
   };
   window.p1Disconnect = async () => {
     try { if (client && session) await client.request('/api/v1/session', { method: 'DELETE' }); }
@@ -77,29 +92,14 @@ function initialize() {
   async function run(task) {
     try { return await task(); } catch (error) {
       if (error.status === 401) clearSession();
-      message(error.message, true);
+      const active = document.querySelector('.page.active')?.id;
+      const target = active === 'page-waiting' ? $('api-waiting-status')
+        : active === 'page-planned' ? $('schedule-status')
+        : active === 'page-history' ? $('audit-status') : $('p1-status');
+      target.textContent = error.message; target.className = 'p1-api-status error';
     }
   }
   const values = (form) => Object.fromEntries(new FormData(form).entries());
-  let activeSection = null;
-  function setActiveSection(id) {
-    const chosen = visibleSections(session?.permissions || []).find((entry) => entry[0] === id);
-    if (!chosen) return;
-    activeSection = id;
-    document.body.classList.add('p1-active');
-    for (const [sectionId] of sections) {
-      const page = $(sectionId);
-      const active = sectionId === id;
-      page.hidden = !active;
-      page.classList.toggle('active', active);
-    }
-    document.querySelectorAll('[data-workbench-section]').forEach((item) => {
-      const active = item.dataset.workbenchSection === id;
-      item.classList.toggle('active', active);
-      if (active) item.setAttribute('aria-current', 'page');
-      else item.removeAttribute('aria-current');
-    });
-  }
   function iso(value) { const date = new Date(value); if (!value || !Number.isFinite(date.getTime())) throw new Error('Enter a valid date and time.'); return date.toISOString(); }
   function table(target, headers, rows) {
     const grid = element('table'), head = element('tr'); headers.forEach((label) => head.append(element('th', label)));
@@ -120,27 +120,34 @@ function initialize() {
     if (rows.some((row) => row.id === prior)) select.value = prior;
   }
   function configureMenus() {
-    $('p1-nav-list').replaceChildren(); $('p1-mobile-nav').replaceChildren();
-    $('p1-drawer-list').replaceChildren();
-    for (const id of ['p1-nav-heading', 'p1-nav-list', 'p1-drawer-heading', 'p1-drawer-list']) $(id).hidden = false;
-    for (const [id] of sections) { $(id).hidden = true; $(id).classList.remove('active'); }
-    const available = visibleSections(session.permissions);
-    for (const [id, label, , icon] of available) {
-      for (const menu of [$('p1-nav-list'), $('p1-drawer-list'), $('p1-mobile-nav')]) {
-        const item = element('button'); item.type = 'button'; item.className = 'ni';
-        item.dataset.workbenchSection = id; item.setAttribute('aria-label', label);
-        const glyph = element('span', icon); glyph.className = 'ni-icon'; glyph.setAttribute('aria-hidden', 'true');
-        const text = element('span', label); text.className = 'ni-label';
-        item.append(glyph, text); item.addEventListener('click', () => setActiveSection(id));
-        menu.append(item);
+    for (const id of ['p1-nav-heading', 'p1-nav-list', 'p1-drawer-heading', 'p1-drawer-list', 'p1-mobile-nav']) $(id).hidden = true;
+    $('branch').hidden = !can('branch.read') && !can('branch.manage');
+    $('appointments').hidden = !can('appointment.read') && !can('appointment.request') && !can('roster.read');
+    $('audit').hidden = !can('audit.read');
+    $('workbench-home').hidden = true;
+    const pageRules = {
+      register: ['registry.create', 'registry.read'],
+      waiting: ['visit.read'],
+      planned: ['appointment.read', 'appointment.request', 'roster.read'],
+      history: ['audit.read'],
+    };
+    for (const [page, permissions] of Object.entries(pageRules)) {
+      for (const item of document.querySelectorAll(`[data-page="${page}"]`)) {
+        if (item.dataset.p1OriginalHidden === undefined) item.dataset.p1OriginalHidden = item.hidden ? '1' : '0';
+        const allowed = permissions.some((permission) => can(permission));
+        item.hidden = allowed ? item.dataset.p1OriginalHidden === '1' : true;
       }
     }
-    $('workbench-home').hidden = true;
-    if (!available.some(([id]) => id === activeSection)) activeSection = available[0]?.[0] || null;
-    if (activeSection) setActiveSection(activeSection);
-    for (const [id, permission] of [['branch-form', 'branch.manage'], ['horse-form', 'registry.create'],
-      ['contact-form', 'contact.create'], ['party-form', 'party.create'], ['reception-form', 'reception.create'],
-      ['resource-form', 'demo.resource.create'], ['appointment-form', 'appointment.request']]) $(id).hidden = !can(permission);
+    for (const [id, permission] of [['branch-form', 'branch.manage'],
+      ['resource-form', 'demo.resource.create'], ['appointment-form', 'appointment.request'],
+      ['roster-admin-area', 'roster.manage']]) $(id).hidden = !can(permission);
+    window.p1OriginalRegistrationReady?.();
+  }
+  function restoreLegacyMenus() {
+    for (const item of document.querySelectorAll('[data-p1-original-hidden]')) {
+      item.hidden = item.dataset.p1OriginalHidden === '1';
+      delete item.dataset.p1OriginalHidden;
+    }
   }
   async function loadBranch() {
     if (!can('branch.read')) return;
@@ -148,49 +155,20 @@ function initialize() {
     $('branch-record').textContent = profile ? `${profile.display_name} (${profile.code}) · version ${profile.version}` : `Branch ${result.branch_id}: profile not yet recorded.`;
     if (profile) { $('branch-form').elements.display_name.value = profile.display_name; $('branch-form').elements.code.value = profile.code; }
   }
-  async function loadRegistry() {
-    if (can('registry.read')) {
-      const result = await client.request('/api/v1/horses?limit=100');
-      table('horses', ['Horse', 'Record UUID'], result.items.map((row) => [row.name, row.id]));
-      for (const select of document.querySelectorAll('[data-horses]')) options(select, result.items, (row) => row.name);
-    }
-    if (can('contact.read')) {
-      const result = await client.request('/api/v1/contacts');
-      table('contacts', ['Contact', 'Phone'], result.items.map((row) => [row.display_name, row.phone]));
-      options($('party-contact'), result.items, (row) => row.display_name);
-    }
-    await loadReception();
-  }
-  async function loadParties() {
-    const horse = $('party-form').elements.horse_id.value;
-    if (!horse) throw new Error('Select a horse first.');
-    const result = await client.request(`/api/v1/horses/${horse}/parties`);
-    table('parties', ['Role', 'Contact', 'Valid from', 'Valid to'], result.items.map((row) => [row.role, row.contact.display_name, row.valid_from, row.valid_to]));
-  }
-  async function loadReception() {
-    if (!can('reception.read')) return;
-    const result = await client.request('/api/v1/reception/tasks');
-    table('reception', ['Caller', 'Summary', 'Status', 'Actions'], result.items.map((row) => {
-      const actions = element('div'); actions.className = 'actions';
-      if (can('reception.link') && row.status !== 'resolved') actions.append(button('Link selected horse', async () => {
-        const horse = $('reception-horse').value; if (!horse) throw new Error('Select the horse confirmed by staff.');
-        await client.request(`/api/v1/reception/tasks/${row.id}/actions`, { method: 'POST', body: { action: 'link', horse_id: horse, expected_version: row.version, reason: 'Staff confirmed in local workbench' } });
-        await loadReception(); message('Horse linked by staff. No automatic identity match was used.');
-      }));
-      if (can('visit.create') && row.horse_id && !row.visit_id) actions.append(button('Register local visit', async () => {
-        const visit = await client.request('/api/v1/visits', { method: 'POST', body: { horse_id: row.horse_id, reception_task_id: row.id } });
-        $('visit-result').textContent = `Visit ${visit.slip_number} registered. No clinical clearance inferred.`;
-        await loadReception(); message('Local visit registered. Numbering remains provisional.');
-      }));
-      return [row.customer_name, row.summary, row.status, actions];
-    }));
-  }
   function windowQuery() { return new URLSearchParams({ starts_at: iso($('window-start').value), ends_at: iso($('window-end').value) }); }
   async function loadSchedule() {
     const query = windowQuery();
+    let horseNames = new Map();
+    if (can('registry.read')) {
+      const horses = await client.request('/api/v1/horses?limit=100');
+      horseNames = new Map(horses.items.map((row) => [row.id, row.name]));
+      for (const select of document.querySelectorAll('[data-horses]')) options(select, horses.items, (row) => row.name);
+    }
     if (can('roster.read')) {
       const roster = await client.request('/api/v1/roster?' + query);
       options($('appointment-resource'), roster.resources.filter((row) => row.active), (row) => row.name);
+      options($('roster-qual-practitioner'), roster.practitioners.filter((row) => row.active), (row) => row.display_name);
+      options($('roster-shift-practitioner'), roster.practitioners.filter((row) => row.active), (row) => row.display_name);
       const names = new Map(roster.practitioners.map((row) => [row.id, row.display_name]));
       table('roster-records', ['Practitioner', 'Recorded qualifications', 'Shifts in window'], roster.practitioners.map((row) => [names.get(row.id),
         roster.qualifications.filter((q) => q.practitioner_id === row.id).map((q) => `${q.code} (${q.valid_from} – ${q.valid_until || 'open'})`).join('; '),
@@ -198,7 +176,7 @@ function initialize() {
     }
     if (can('appointment.read')) {
       const result = await client.request('/api/v1/appointments?' + query);
-      table('appointment-records', ['Appointment', 'Window', 'Status/version', 'Actions'], result.items.map((row) => {
+      table('appointment-records', ['Horse', 'Window', 'Status/version', 'Actions'], result.items.map((row) => {
         const actions = element('div'); actions.className = 'actions';
         const mutate = (action) => async () => {
           const body = { action, expected_version: row.version };
@@ -210,7 +188,7 @@ function initialize() {
         if (row.status === 'REQUESTED' && can('appointment.confirm')) actions.append(button('Confirm', mutate('confirm')));
         if (row.status === 'CONFIRMED' && can('appointment.arrive')) actions.append(button('Record arrival', mutate('arrive')));
         if (['REQUESTED', 'CONFIRMED'].includes(row.status)) for (const [action, label] of [['reschedule', 'Reschedule'], ['cancel', 'Cancel']]) if (can('appointment.' + action)) actions.append(button(label, mutate(action)));
-        return [row.id, `${row.starts_at} – ${row.ends_at}`, `${row.status} / ${row.version}`, actions];
+        return [horseNames.get(row.horse_id) || row.horse_id, `${row.starts_at} – ${row.ends_at}`, `${row.status} / ${row.version}`, actions];
       }));
     }
   }
@@ -222,6 +200,75 @@ function initialize() {
     table('audit-records', ['Time', 'Action', 'Record', 'Actor', 'Details'], result.items.map((row) => [row.occurred_at, row.action, `${row.aggregate_type}: ${row.aggregate_id}`, row.actor_id, element('pre', JSON.stringify(row.details, null, 2))]));
     cursor = result.next_cursor; $('audit-next').hidden = !cursor;
   }
+  async function loadVisits() {
+    $('api-waiting-area').hidden = false;
+    $('legacy-waiting-view').hidden = true;
+    if (!can('visit.read')) {
+      $('api-waiting-status').textContent = 'This session needs visit.read to display Clinical API visits. Ask the local administrator to add it, then reconnect.';
+      $('api-visit-count').textContent = '—'; $('api-visit-records').replaceChildren(); return;
+    }
+    const result = await client.request('/api/v1/visits');
+    const roster = can('roster.read') ? await client.request('/api/v1/roster?' + windowQuery()) : { practitioners: [] };
+    const practitioners = roster.practitioners.filter((row) => row.active);
+    const waiting = result.items.filter((row) => ['REGISTERED', 'ARRIVED'].includes(row.status));
+    $('api-visit-count').textContent = waiting.length;
+    $('w-sub').textContent = `${waiting.length} Clinical API visits waiting for examination`;
+    $('api-waiting-status').textContent = 'Clinical API records for the authorized branch. Arrival and vet assignment actions are permission controlled.';
+    table('api-visit-records', ['Visit', 'Horse', 'Owner', 'Status', 'Reception notes', 'Actions'], waiting.map((row) => {
+      const actions = element('div'); actions.className = 'actions';
+      if (row.status === 'REGISTERED' && can('visit.arrive')) actions.append(button('Record arrival', async () => {
+        await client.request(`/api/v1/visits/${row.id}/arrival`, { method: 'POST', body: { expected_version: row.version } });
+        await loadVisits();
+      }));
+      if (can('visit.assign') && practitioners.length) {
+        const select = element('select'); select.className = 'inp';
+        options(select, practitioners, (person) => person.display_name);
+        if (row.assigned_practitioner_id) select.value = row.assigned_practitioner_id;
+        actions.append(select, button(row.assigned_practitioner_id ? 'Reassign vet' : 'Assign vet', async () => {
+          if (!select.value) throw new Error('Select a practitioner first.');
+          await client.request(`/api/v1/visits/${row.id}/assignments`, { method: 'POST', body: { practitioner_id: select.value } });
+          await loadVisits();
+        }));
+      }
+      return [row.slip_number, row.horse?.name, row.owner?.display_name, row.status,
+        row.reception?.summary, actions];
+    }));
+    if (can('reception.read')) {
+      const inbox = await client.request('/api/v1/reception/tasks');
+      const horses = can('registry.read') ? await client.request('/api/v1/horses?limit=100') : { items: [] };
+      $('api-reception-count').textContent = inbox.items.length;
+      table('api-reception-records', ['Source', 'Caller', 'Phone', 'Request', 'Status', 'Actions'], inbox.items.map((task) => {
+        const actions = element('div'); actions.className = 'actions';
+        if (!task.horse_id && can('reception.link') && horses.items.length) {
+          const select = element('select'); select.className = 'inp'; options(select, horses.items, (horse) => horse.name);
+          actions.append(select, button('Link selected horse', async () => {
+            if (!select.value) throw new Error('Select the horse confirmed by staff.');
+            await client.request(`/api/v1/reception/tasks/${task.id}/actions`, { method: 'POST', body: {
+              action: 'link', horse_id: select.value, expected_version: task.version,
+            } });
+            await loadVisits();
+          }));
+        } else if (task.horse_id && !task.visit_id && can('visit.create')) {
+          actions.append(button('Register visit', async () => {
+            await client.request('/api/v1/visits', { method: 'POST', body: {
+              horse_id: task.horse_id, reception_task_id: task.id,
+            } });
+            await loadVisits();
+          }));
+        }
+        return [task.source, task.customer_name, task.phone, task.summary, task.status, actions];
+      }));
+    } else {
+      $('api-reception-count').textContent = '—'; $('api-reception-records').replaceChildren(element('p', 'This session needs reception.read to view reception requests.'));
+    }
+  }
+  window.p1PageChanged = (page) => {
+    if (!session) return;
+    if (page === 'dashboard' && can('branch.read')) run(loadBranch);
+    if (page === 'planned' && (can('appointment.read') || can('roster.read'))) run(loadSchedule);
+    if (page === 'history' && can('audit.read')) run(() => loadAudit());
+    if (page === 'waiting') run(loadVisits);
+  };
   function form(id, handler) { $(id).addEventListener('submit', (event) => { event.preventDefault(); run(async () => { const submit = $(id).querySelector('button'); submit.disabled = true; try { await handler(values($(id))); } finally { submit.disabled = false; } }); }); }
   $('p1-connect').addEventListener('click', () => run(async () => {
     clearSession(); client = createClient($('p1-api-base').value.trim());
@@ -229,27 +276,46 @@ function initialize() {
     await client.request('/api/v1/dev/session', { method: 'POST', body: {} });
     session = await client.request('/api/v1/session');
     if (!session.local_prototype) throw new Error('This workbench requires an opted-in local development session.');
+    window.p1ClinicalApi = {
+      get connected() { return Boolean(client && session); },
+      can,
+      request(path, options) { if (!client || !session) throw new Error('Connect the P1 Clinical API session first.'); return client.request(path, options); },
+      searchContacts(query) { return client.request('/api/v1/contacts?q=' + encodeURIComponent(query)); },
+      registerIntake(payload) { return client.request('/api/v1/registration-intakes', { method: 'POST', body: payload }); },
+      listHorses() { return client.request('/api/v1/horses?limit=100'); },
+    };
     $('p1-identity').textContent = `Actor ${session.actor_id} · branch ${session.branch_id} · expires ${session.expires_at}`;
     $('p1-api-state').textContent = 'Connected · server permissions';
-    $('p1-logout').disabled = false; $('p1-connect-card').hidden = true; configureMenus();
-    await loadBranch(); await loadRegistry();
+    $('p1-logout').disabled = false; $('p1-connect').disabled = true; configureMenus();
+    await loadBranch(); window.p1OriginalRegistrationReady?.();
     if (can('appointment.read') || can('roster.read')) await loadSchedule();
-    message('Local session connected. Menus reflect server permissions.');
+    if (can('visit.read')) await loadVisits();
+    message('P1 API session connected. API access is controlled by server permissions.');
   }));
   $('p1-logout').addEventListener('click', () => run(async () => { await window.p1Disconnect(); message('Signed out.'); }));
   form('branch-form', async (body) => { await client.request('/api/v1/branches/current', { method: profile ? 'PATCH' : 'POST', body: { ...body, ...(profile ? { expected_version: profile.version } : {}) } }); await loadBranch(); message('Current-branch profile saved.'); });
-  form('horse-form', async (body) => { await client.request('/api/v1/horses', { method: 'POST', body }); await loadRegistry(); message('Synthetic horse saved.'); });
-  form('contact-form', async (body) => { await client.request('/api/v1/contacts', { method: 'POST', body }); await loadRegistry(); message('Contact saved; phone is not treated as a unique identity.'); });
-  form('party-form', async ({ horse_id, ...body }) => { body.valid_from = iso(body.valid_from); await client.request(`/api/v1/horses/${horse_id}/parties`, { method: 'POST', body }); await loadParties(); message('Party role recorded with audit evidence.'); });
-  $('load-parties').addEventListener('click', () => run(loadParties));
-  form('reception-form', async (body) => { await client.request('/api/v1/reception/tasks', { method: 'POST', body }); await loadReception(); message('Manual reception task saved.'); });
   form('window-form', loadSchedule);
   form('resource-form', async (body) => { await client.request('/api/v1/dev/scheduling-resources', { method: 'POST', body: { ...body, resource_type: 'room' } }); await loadSchedule(); message('Synthetic local room created.'); });
   form('appointment-form', async (body) => { body.starts_at = iso(body.starts_at); body.ends_at = iso(body.ends_at); await client.request('/api/v1/appointments', { method: 'POST', body }); await loadSchedule(); message('Appointment requested; no visit or clinical clearance created.'); });
+  form('roster-practitioner-form', async (body) => { await client.request('/api/v1/roster/practitioners', { method: 'POST', body }); await loadSchedule(); message('Practitioner added to the local roster.'); });
+  form('roster-qualification-form', async (body) => {
+    const practitioner = body.practitioner_id; delete body.practitioner_id;
+    body.kind = 'qualification'; body.valid_from = iso(body.valid_from);
+    if (body.valid_until) body.valid_until = iso(body.valid_until); else delete body.valid_until;
+    await client.request(`/api/v1/roster/practitioners/${practitioner}/entries`, { method: 'POST', body });
+    await loadSchedule(); message('Qualification recorded. Eligibility rules are not yet enforced.');
+  });
+  form('roster-shift-form', async (body) => {
+    const practitioner = body.practitioner_id; delete body.practitioner_id;
+    body.kind = 'shift'; body.starts_at = iso(body.starts_at); body.ends_at = iso(body.ends_at);
+    await client.request(`/api/v1/roster/practitioners/${practitioner}/entries`, { method: 'POST', body });
+    await loadSchedule(); message('Duty shift recorded.');
+  });
   form('audit-form', () => loadAudit()); $('audit-next').addEventListener('click', () => run(() => loadAudit(true)));
+  $('api-refresh-visits').addEventListener('click', () => run(loadVisits));
   const localValue = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);
   $('window-start').value = localValue(new Date(tomorrow.getTime() - 3600000)); $('window-end').value = localValue(new Date(tomorrow.getTime() + 86400000));
-  for (const id of ['appointment-form', 'party-form']) for (const input of $(id).querySelectorAll('input[type="datetime-local"]')) input.value = localValue(new Date(tomorrow.getTime() + (input.name === 'ends_at' ? 3600000 : 0)));
+  for (const input of $('appointment-form').querySelectorAll('input[type="datetime-local"]')) input.value = localValue(new Date(tomorrow.getTime() + (input.name === 'ends_at' ? 3600000 : 0)));
   $('new-start').value = localValue(new Date(tomorrow.getTime() + 7200000)); $('new-end').value = localValue(new Date(tomorrow.getTime() + 10800000));
 }

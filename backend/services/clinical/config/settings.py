@@ -22,7 +22,12 @@ DATABASES = {"default": dj_database_url.parse(os.getenv("DATABASE_URL", "postgre
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"
-REST_FRAMEWORK = {"DEFAULT_PERMISSION_CLASSES": ["registry.identity.HasMoritonScope"], "DEFAULT_AUTHENTICATION_CLASSES": ["registry.identity.MoritonSessionAuthentication"], "EXCEPTION_HANDLER": "registry.errors.moriton_exception_handler"}
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": ["registry.identity.HasMoritonScope"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["registry.identity.MoritonSessionAuthentication"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "EXCEPTION_HANDLER": "registry.errors.moriton_exception_handler",
+}
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = "Lax"

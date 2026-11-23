@@ -5,7 +5,7 @@ from uuid import UUID
 
 from django.db import connection
 from django.utils.dateparse import parse_datetime
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -540,12 +540,14 @@ class VisitAssignmentView(APIView):
 class VisitDraftNoteView(APIView):
     def post(self, request, visit_id):
         scope = _scope(request, "clinical_note.draft.write")
+        value = DraftNoteCreateInput(data=request.data)
+        value.is_valid(raise_exception=True)
         try:
             note = write_draft_note(
                 visit_id=visit_id, organization_id=scope.organization_id,
                 branch_id=scope.branch_id, actor_id=scope.actor_id,
-                body=str(request.data.get("body", "")),
-                note_type=str(request.data.get("note_type", "general")),
+                body=value.validated_data["body"],
+                note_type=value.validated_data["note_type"],
             )
         except Visit.DoesNotExist as exc:
             raise NotFound("Visit not found.") from exc
@@ -559,11 +561,14 @@ class VisitDraftNoteView(APIView):
 class ClinicalNoteRevisionView(APIView):
     def post(self, request, note_id):
         scope = _scope(request, "clinical_note.draft.write")
+        value = DraftNoteRevisionInput(data=request.data)
+        value.is_valid(raise_exception=True)
         try:
             note = revise_draft_note(
                 note_id=note_id, organization_id=scope.organization_id,
                 branch_id=scope.branch_id, actor_id=scope.actor_id,
-                expected_version=_version(request.data), body=str(request.data.get("body", "")),
+                expected_version=value.validated_data["expected_version"],
+                body=value.validated_data["body"],
             )
         except ClinicalNote.DoesNotExist as exc:
             raise NotFound("Clinical note not found.") from exc
@@ -574,3 +579,13 @@ class ClinicalNoteRevisionView(APIView):
         revision = note.revisions.get(revision=note.version)
         return Response({"id": str(note.id), "status": note.status,
                          "version": note.version, "body": revision.body})
+
+
+class DraftNoteCreateInput(serializers.Serializer):
+    body = serializers.CharField(max_length=20000, allow_blank=False, trim_whitespace=True)
+    note_type = serializers.CharField(max_length=32, required=False, default="general", allow_blank=False)
+
+
+class DraftNoteRevisionInput(serializers.Serializer):
+    body = serializers.CharField(max_length=20000, allow_blank=False, trim_whitespace=True)
+    expected_version = serializers.IntegerField(min_value=1)

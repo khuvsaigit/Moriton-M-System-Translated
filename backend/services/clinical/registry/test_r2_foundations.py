@@ -150,7 +150,7 @@ class R2FoundationsTests(TestCase):
         )
         form, version1 = create_screening_form(
             organization_id=self.organization_id, branch_id=self.branch_id,
-            actor_id=self.actor_id, name="Synthetic form", schema={"questions": []},
+            actor_id=self.actor_id, name="Synthetic form", schema={"questions": [{"id": "q1"}]},
         )
         publish_screening_form_version(
             version_id=version1.id, organization_id=self.organization_id,
@@ -178,7 +178,7 @@ class R2FoundationsTests(TestCase):
         self.assertFalse(review.reviewer_id)
         saved_v1 = ScreeningFormVersion.objects.get(pk=version1.id)
         self.assertIsNotNone(saved_v1.published_at)
-        self.assertEqual(saved_v1.schema, {"questions": []})
+        self.assertEqual(saved_v1.schema, {"questions": [{"id": "q1"}]})
 
     @override_settings(DEBUG=True, MORITON_LOCAL_AUTH_ENABLED=True)
     def test_appointment_http_actions_keep_booking_and_arrival_distinct(self):

@@ -32,6 +32,8 @@
 .wb-form .fld { min-width: 0; }
 .wb-form .inp { width: 100%; max-width: 100%; }
 .wb-form-actions { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.screening-questions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.p1-screening-card { border-left: 3px solid var(--gold, #caa546); }
 .wb-inline-actions { grid-column: 1 / -1; }
 .wb-span-all { grid-column: 1 / -1; }
 .wb-record-summary { margin-top: 12px; font-weight: 800; }

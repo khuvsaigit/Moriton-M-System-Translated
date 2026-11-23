@@ -26,6 +26,7 @@ from registry.release_api import (
     AuditListView, ContactListView, CurrentBranchView, CurrentSessionView, RegistrationIntakeCreateView,
     HorsePartiesView, RosterEntryCreateView, RosterPractitionerCreateView, RosterReadView,
 )
+from registry.screening_api import ScreeningAnswerCreateView, ScreeningFormListView, ScreeningReviewQueueView
 
 urlpatterns = [
     path("api/v1/session", CurrentSessionView.as_view()),
@@ -37,6 +38,9 @@ urlpatterns = [
     path("api/v1/roster", RosterReadView.as_view()),
     path("api/v1/roster/practitioners", RosterPractitionerCreateView.as_view()),
     path("api/v1/roster/practitioners/<uuid:practitioner_id>/entries", RosterEntryCreateView.as_view()),
+    path("api/v1/screening/forms", ScreeningFormListView.as_view()),
+    path("api/v1/screening/answers", ScreeningAnswerCreateView.as_view()),
+    path("api/v1/screening/reviews", ScreeningReviewQueueView.as_view()),
     path("api/v1/health/live", HealthView.as_view()),
     path("api/v1/health/ready", ReadyView.as_view()),
     path("api/v1/horses", HorseListCreateView.as_view()),

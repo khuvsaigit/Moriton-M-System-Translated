@@ -14,7 +14,7 @@
 <!-- ============================================================
      PWA — суулгаж болох програм болгох (manifest + icon)
      ============================================================ -->
-<link rel="manifest" href="manifest.json?v=20261120-r3">
+<link rel="manifest" href="manifest.json?v=20261123-r5-draft-notes">
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -29,10 +29,10 @@
      ⚠️ Доорх firebaseConfig-ийг ӨӨРИЙН project-ийн утгаар СОЛИНО.
         Firebase Console → Project settings → Your apps → Web app
      ============================================================ -->
-<script type="module" src="firebase.js?v=20261120-r3"></script>
+<script type="module" src="firebase.js?v=20261123-r5-draft-notes"></script>
 
-<link rel="stylesheet" href="style.css?v=20261120-r3">
-<link rel="stylesheet" href="backend-workbench.css?v=20261120-r3">
+<link rel="stylesheet" href="style.css?v=20261123-r5-draft-notes">
+<link rel="stylesheet" href="backend-workbench.css?v=20261123-r5-draft-notes">
 </head>
 <body>
 
@@ -241,8 +241,8 @@
         </div>
 
         <div class="card p1-session-card" id="p1-connect-card">
-          <div class="ch">P1 services · R1–R3 <span class="ch-r" id="p1-api-state">Not connected</span></div>
-          <div class="p1-api-note">Connect the local Clinical API. R1–R3 actions in this shell use this session’s server permissions. The older application login is still separate; use synthetic data only.</div>
+          <div class="ch">P1 Clinical API <span class="ch-r" id="p1-api-state">Not connected</span></div>
+          <div class="p1-api-note">Connect the local Clinical API. API-backed actions in this shell use this session’s server permissions. The older application login is separate; use synthetic data only.</div>
           <div class="fg r2 p1-api-connection">
             <div class="fld"><label for="p1-api-base">Local Clinical API origin</label><input class="inp" id="p1-api-base" value="http://localhost:8001" autocomplete="off" spellcheck="false"></div>
             <div class="fld p1-api-action"><label>&nbsp;</label><button type="button" class="btn btn-p" id="p1-connect">Connect P1 session</button></div>
@@ -531,6 +531,33 @@
                 <button class="btn btn-n" onclick="moveToInpatient()">🏥 Байрлуулах</button>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="card p1-screening-card" id="clinical-draft-area" hidden>
+          <div class="ch">R5 · Clinical note draft <span class="ch-r">P1 Clinical API</span></div>
+          <p class="p1-api-note">Draft notes are saved with an audit trail and version history. Saving here does not sign or approve a clinical record. Sign-off, consent and owner-summary rules remain pending client approval.</p>
+          <div id="clinical-draft-status" class="p1-api-status" role="status" aria-live="polite"></div>
+          <form id="clinical-draft-form" class="fg r2 wb-form">
+            <div class="fld"><label for="clinical-draft-visit">Clinical visit</label><select class="inp" id="clinical-draft-visit" required><option value="">Connect and load visits</option></select></div>
+            <div class="fld"><label for="clinical-draft-version">Current note state</label><input class="inp" id="clinical-draft-version" value="No draft note" readonly></div>
+            <div class="fld" style="grid-column:1/-1"><label for="clinical-draft-body">Draft note</label><textarea class="inp" id="clinical-draft-body" rows="6" maxlength="20000" required placeholder="Enter clinical notes for this visit. This remains an unsigned draft."></textarea></div>
+            <div class="wb-form-actions"><button class="btn btn-p" id="clinical-draft-save" type="submit">Save draft note</button></div>
+          </form>
+        </div>
+        <div class="card p1-screening-card" id="screening-area" hidden>
+          <div class="ch">R4 · Screening questionnaire <span class="ch-r">P1 Clinical API</span></div>
+          <p class="p1-api-note">Uses only published form versions. Submitted answers create a separate pending veterinary review; they do not identify a suspected case, grant clearance, or start an emergency or isolation pathway.</p>
+          <div id="screening-status" class="p1-api-status" role="status" aria-live="polite"></div>
+          <form id="screening-form" class="fg r2 wb-form">
+            <div class="fld"><label for="screening-visit">Clinical visit</label><select class="inp" id="screening-visit" required><option value="">Connect and load visits</option></select></div>
+            <div class="fld"><label for="screening-version">Published questionnaire</label><select class="inp" id="screening-version" required><option value="">Connect and load forms</option></select></div>
+            <div id="screening-questions" class="screening-questions"></div>
+            <div class="wb-form-actions"><button class="btn btn-p" id="screening-submit" type="submit">Submit for vet review</button></div>
+          </form>
+          <div id="screening-review-note" class="p1-api-status" aria-live="polite"></div>
+          <div id="screening-review-area">
+            <div class="ch" style="margin-top:12px">Pending veterinary reviews</div>
+            <div id="screening-review-records" class="wb-table-wrap"></div>
           </div>
         </div>
       </section>
@@ -1960,15 +1987,15 @@
 
 <div id="print-area"></div>
 
-<script src="app.js?v=20261120-r3"></script>
-<script src="lab.js?v=20261120-r3"></script>
-<script src="pharmacy.js?v=20261120-r3"></script>
-<script src="timesheet.js?v=20261120-r3"></script>
-<script src="dailyreport.js?v=20261120-r3"></script>
-<script src="dashboard-backend-demo.js?v=20261120-r3"></script>
-<script type="module" src="p1-ui.mjs?v=20261120-r3"></script>
+<script src="app.js?v=20261123-r5-draft-notes"></script>
+<script src="lab.js?v=20261123-r5-draft-notes"></script>
+<script src="pharmacy.js?v=20261123-r5-draft-notes"></script>
+<script src="timesheet.js?v=20261123-r5-draft-notes"></script>
+<script src="dailyreport.js?v=20261123-r5-draft-notes"></script>
+<script src="dashboard-backend-demo.js?v=20261123-r5-draft-notes"></script>
+<script type="module" src="p1-ui.mjs?v=20261123-r5-draft-notes"></script>
 
 <!-- PWA: service worker бүртгэх, автомат шинэчлэлт, суулгах товч -->
-<script src="pwa.js?v=20261120-r3"></script>
+<script src="pwa.js?v=20261123-r5-draft-notes"></script>
 </body>
 </html>

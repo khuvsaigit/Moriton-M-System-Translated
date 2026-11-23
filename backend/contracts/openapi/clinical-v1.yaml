@@ -146,6 +146,33 @@ paths:
           application/json:
             schema: {type: object, required: [kind], properties: {kind: {type: string, enum: [qualification, shift]}, code: {type: string}, valid_from: {type: string, format: date-time}, valid_until: {type: string, format: date-time}, starts_at: {type: string, format: date-time}, ends_at: {type: string, format: date-time}}}
       responses: {'201': {description: Qualification or shift recorded}, '400': {description: Invalid entry}, '403': {description: Local prototype unavailable or permission missing}, '404': {description: Practitioner not found}}
+  /screening/forms:
+    get:
+      operationId: listPublishedScreeningForms
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: 'Published, active form versions in the authorized branch; screening.read required; form order and content are client controlled'}}
+  /screening/answers:
+    post:
+      operationId: submitScreeningAnswers
+      security: [{sessionAuth: []}]
+      description: 'Records an immutable answer revision and creates a separate pending veterinary review. Answers must match the required fields and supported value types in the exact published version. Does not evaluate triggers or grant clinical clearance; screening.submit required.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [form_version_id, visit_id, answers]
+              properties:
+                form_version_id: {type: string, format: uuid}
+                visit_id: {type: string, format: uuid}
+                answers: {type: object, additionalProperties: true}
+      responses: {'201': {description: 'Answers submitted with revision and pending vet review'}, '400': {description: 'Answers do not match the published form schema'}, '403': {description: Permission denied}, '404': {description: Form version or visit not found in this branch}}
+  /screening/reviews:
+    get:
+      operationId: listPendingScreeningReviews
+      security: [{sessionAuth: []}]
+      responses: {'200': {description: 'Up to 100 pending answer submissions for the authorized branch; read-only; screening.review.read required'}}
   /health/live:
     get:
       operationId: clinicalLiveness
@@ -471,13 +498,13 @@ components:
       type: object
       required: [body]
       properties:
-        body: {type: string}
-        note_type: {type: string, default: general}
+        body: {type: string, minLength: 1, maxLength: 20000}
+        note_type: {type: string, minLength: 1, maxLength: 32, default: general}
     DraftNoteRevision:
       type: object
       required: [body, expected_version]
       properties:
-        body: {type: string}
+        body: {type: string, minLength: 1, maxLength: 20000}
         expected_version: {type: integer, minimum: 1}
     PrescriptionCreate:
       type: object

@@ -28,7 +28,20 @@ export function createClient(base, fetcher = globalThis.fetch) {
       if (csrf) headers['X-CSRFToken'] = csrf;
       const response = await fetcher(origin + path, { method, headers,
         body: body === undefined ? undefined : JSON.stringify(body), credentials: 'include', redirect: 'error' });
-      const data = response.status === 204 ? null : await response.json();
+      let data = null;
+      if (response.status !== 204) {
+        const payload = await response.text();
+        if (payload) {
+          try { data = JSON.parse(payload); } catch {
+            const message = response.status === 401
+              ? 'The P1 session has expired. Reconnect the P1 Clinical API session and try again.'
+              : `The Clinical API returned a non-JSON response (HTTP ${response.status}). Check the API service and reconnect the P1 session if needed.`;
+            const error = new Error(message);
+            error.status = response.status;
+            throw error;
+          }
+        }
+      }
       if (!response.ok) {
         const error = new Error(data?.error?.message || data?.detail || JSON.stringify(data));
         error.status = response.status;
@@ -55,7 +68,8 @@ function initialize() {
   $('p1-connect-card').append($('p1-status'));
   $('p1-mobile-nav').hidden = true;
   for (const id of ['p1-nav-heading', 'p1-nav-list', 'p1-drawer-heading', 'p1-drawer-list']) $(id).hidden = true;
-  let client, session, profile = null, cursor = null;
+  let client, session, profile = null, cursor = null, screeningForms = [], screeningVisits = [];
+  let clinicalVisits = [], currentClinicalNote = null;
   const can = (permission) => session?.permissions.includes(permission);
   const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); return node; };
   function message(text, error = false) { $('p1-status').textContent = text; $('p1-status').className = error ? 'error' : 'ok'; }
@@ -76,6 +90,11 @@ function initialize() {
     $('p1-connect-card').hidden = false;
     for (const id of ['appointment-records', 'roster-records', 'audit-records']) $(id).replaceChildren();
     $('api-visit-records').replaceChildren(); $('api-reception-records').replaceChildren(); $('api-waiting-area').hidden = true;
+    $('screening-area').hidden = true; $('screening-questions').replaceChildren(); $('screening-review-note').textContent = '';
+    $('screening-review-records').replaceChildren();
+    $('clinical-draft-area').hidden = true; $('clinical-draft-form').reset(); $('clinical-draft-status').textContent = '';
+    $('clinical-draft-version').value = 'No draft note'; clinicalVisits = []; currentClinicalNote = null;
+    screeningForms = []; screeningVisits = [];
     $('legacy-waiting-view').hidden = false;
     for (const select of document.querySelectorAll('#appointment-resource')) select.replaceChildren();
     for (const id of ['branch-form']) $(id).reset();
@@ -95,7 +114,8 @@ function initialize() {
       const active = document.querySelector('.page.active')?.id;
       const target = active === 'page-waiting' ? $('api-waiting-status')
         : active === 'page-planned' ? $('schedule-status')
-        : active === 'page-history' ? $('audit-status') : $('p1-status');
+        : active === 'page-history' ? $('audit-status')
+          : active === 'page-exam' && !$('screening-area').hidden ? $('screening-status') : $('p1-status');
       target.textContent = error.message; target.className = 'p1-api-status error';
     }
   }
@@ -124,6 +144,11 @@ function initialize() {
     $('branch').hidden = !can('branch.read') && !can('branch.manage');
     $('appointments').hidden = !can('appointment.read') && !can('appointment.request') && !can('roster.read');
     $('audit').hidden = !can('audit.read');
+    $('screening-area').hidden = !can('screening.read') && !can('screening.review.read');
+    $('screening-form').hidden = !can('screening.read');
+    $('screening-review-area').hidden = !can('screening.review.read');
+    $('screening-submit').hidden = !can('screening.submit');
+    $('clinical-draft-area').hidden = !can('visit.read') || !can('clinical_note.draft.write');
     $('workbench-home').hidden = true;
     const pageRules = {
       register: ['registry.create', 'registry.read'],
@@ -262,12 +287,95 @@ function initialize() {
       $('api-reception-count').textContent = '—'; $('api-reception-records').replaceChildren(element('p', 'This session needs reception.read to view reception requests.'));
     }
   }
+  function renderScreeningQuestions() {
+    const version = screeningForms.find((row) => row.id === $('screening-version').value);
+    const target = $('screening-questions'); target.replaceChildren();
+    if (!version) return;
+    const questions = Array.isArray(version.schema?.questions) ? version.schema.questions : [];
+    if (!questions.length) {
+      target.append(element('p', 'This published version contains no questions in the supported question list. Ask the form owner to provide the approved question schema.'));
+      return;
+    }
+    for (const question of questions) {
+      if (!question || typeof question.id !== 'string' || !question.id.trim()) continue;
+      const wrapper = element('div'); wrapper.className = 'fld';
+      const label = element('label', question.label || question.question || question.id);
+      if (question.required) label.append(element('span', ' *'));
+      wrapper.append(label);
+      const type = String(question.type || 'text').toLowerCase();
+      let input;
+      if (type === 'textarea') { input = element('textarea'); input.rows = 3; }
+      else if (type === 'select' || type === 'yes_no' || type === 'boolean') {
+        input = element('select'); input.append(new Option('Select an answer', ''));
+        const choices = type === 'yes_no' || type === 'boolean' ? [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]
+          : (Array.isArray(question.options) ? question.options.map((choice) => typeof choice === 'string'
+            ? { value: choice, label: choice } : choice) : []);
+        choices.forEach((choice) => {
+          if (choice && typeof choice.value === 'string' && typeof (choice.label ?? choice.value) === 'string')
+            input.add(new Option(choice.label ?? choice.value, choice.value));
+        });
+      } else {
+        input = element('input');
+        input.type = ['number', 'date'].includes(type) ? type : 'text';
+      }
+      input.className = 'inp'; input.id = `screening-answer-${question.id}`;
+      input.dataset.answerId = question.id; label.htmlFor = input.id;
+      input.required = Boolean(question.required); wrapper.append(input); target.append(wrapper);
+    }
+  }
+  async function loadScreening() {
+    if (!can('screening.read') && !can('screening.review.read')) return;
+    $('screening-area').hidden = false;
+    const [forms, visits, reviews] = await Promise.all([
+      can('screening.read') ? client.request('/api/v1/screening/forms') : Promise.resolve({ items: [] }),
+      can('screening.read') && can('visit.read') ? client.request('/api/v1/visits') : Promise.resolve({ items: [] }),
+      can('screening.review.read') ? client.request('/api/v1/screening/reviews') : Promise.resolve({ items: [] }),
+    ]);
+    screeningForms = forms.items || [];
+    screeningVisits = (visits.items || []).filter((row) => ['REGISTERED', 'ARRIVED', 'IN_PROGRESS'].includes(row.status));
+    options($('screening-version'), screeningForms, (row) => `${row.name} · v${row.version}`);
+    options($('screening-visit'), screeningVisits, (row) => `${row.slip_number} · ${row.horse?.name || row.horse_id} · ${row.status}`);
+    renderScreeningQuestions();
+    $('screening-status').textContent = !can('screening.read') ? '' : screeningForms.length
+      ? `${screeningForms.length} published questionnaire version(s) available for this branch.`
+      : 'No published questionnaire versions are available in this branch yet. Client-approved form content is required before staff can complete screening.';
+    $('screening-submit').disabled = !can('screening.submit') || !screeningForms.length || !screeningVisits.length
+      || !$('screening-questions').querySelector('[data-answer-id]');
+    if (can('screening.read') && !can('visit.read')) $('screening-status').textContent += ' This session also needs visit.read to choose a visit.';
+    if (can('screening.read') && !can('screening.submit')) $('screening-status').textContent += ' This session needs screening.submit to submit answers.';
+    table('screening-review-records', ['Submitted', 'Visit / horse', 'Questionnaire', 'Answers', 'Status'], (reviews.items || []).map((row) => [
+      row.submitted_at, `${row.slip_number} · ${row.horse_name}`, `${row.form_name} v${row.form_version} / rev ${row.revision}`,
+      element('pre', JSON.stringify(row.answers, null, 2)), row.decision,
+    ]));
+  }
+  async function loadClinicalDrafts() {
+    if (!can('visit.read') || !can('clinical_note.draft.write')) return;
+    $('clinical-draft-area').hidden = false;
+    const result = await client.request('/api/v1/visits');
+    clinicalVisits = (result.items || []).filter((row) => ['REGISTERED', 'ARRIVED', 'IN_PROGRESS'].includes(row.status));
+    options($('clinical-draft-visit'), clinicalVisits,
+      (row) => `${row.slip_number} · ${row.horse?.name || row.horse_id} · ${row.status}`);
+    selectClinicalDraftVisit();
+    $('clinical-draft-status').textContent = clinicalVisits.length
+      ? 'Draft notes are available for active Clinical visits in this branch.'
+      : 'No active Clinical API visits are available in this branch.';
+  }
+  function selectClinicalDraftVisit() {
+    const selectedId = $('clinical-draft-visit').value;
+    const visit = clinicalVisits.find((row) => row.id === selectedId);
+    currentClinicalNote = visit?.draft_note || null;
+    $('clinical-draft-body').value = currentClinicalNote?.body || '';
+    $('clinical-draft-version').value = currentClinicalNote
+      ? `${currentClinicalNote.status} · revision ${currentClinicalNote.version}` : 'No draft note';
+  }
   window.p1PageChanged = (page) => {
     if (!session) return;
     if (page === 'dashboard' && can('branch.read')) run(loadBranch);
     if (page === 'planned' && (can('appointment.read') || can('roster.read'))) run(loadSchedule);
     if (page === 'history' && can('audit.read')) run(() => loadAudit());
     if (page === 'waiting') run(loadVisits);
+    if (page === 'exam' && (can('screening.read') || can('screening.review.read'))) run(loadScreening);
+    if (page === 'exam' && can('clinical_note.draft.write') && can('visit.read')) run(loadClinicalDrafts);
   };
   function form(id, handler) { $(id).addEventListener('submit', (event) => { event.preventDefault(); run(async () => { const submit = $(id).querySelector('button'); submit.disabled = true; try { await handler(values($(id))); } finally { submit.disabled = false; } }); }); }
   $('p1-connect').addEventListener('click', () => run(async () => {
@@ -290,6 +398,7 @@ function initialize() {
     await loadBranch(); window.p1OriginalRegistrationReady?.();
     if (can('appointment.read') || can('roster.read')) await loadSchedule();
     if (can('visit.read')) await loadVisits();
+    if (can('clinical_note.draft.write') && can('visit.read')) await loadClinicalDrafts();
     message('P1 API session connected. API access is controlled by server permissions.');
   }));
   $('p1-logout').addEventListener('click', () => run(async () => { await window.p1Disconnect(); message('Signed out.'); }));
@@ -312,6 +421,49 @@ function initialize() {
     await loadSchedule(); message('Duty shift recorded.');
   });
   form('audit-form', () => loadAudit()); $('audit-next').addEventListener('click', () => run(() => loadAudit(true)));
+  $('screening-version').addEventListener('change', renderScreeningQuestions);
+  $('clinical-draft-visit').addEventListener('change', selectClinicalDraftVisit);
+  $('clinical-draft-form').addEventListener('submit', (event) => {
+    event.preventDefault(); run(async () => {
+      const form = $('clinical-draft-form');
+      if (!form.reportValidity()) return;
+      const visitId = $('clinical-draft-visit').value;
+      if (!visitId) throw new Error('Select a Clinical visit first.');
+      const submit = $('clinical-draft-save'); submit.disabled = true;
+      try {
+        const body = $('clinical-draft-body').value.trim();
+        if (currentClinicalNote) {
+          await client.request(`/api/v1/clinical-notes/${currentClinicalNote.id}/revisions`, {
+            method: 'POST', body: { expected_version: currentClinicalNote.version, body },
+          });
+        } else {
+          await client.request(`/api/v1/visits/${visitId}/draft-notes`, {
+            method: 'POST', body: { note_type: 'general', body },
+          });
+        }
+        await loadClinicalDrafts();
+        $('clinical-draft-status').textContent = 'Unsigned draft saved with version history and audit record.';
+      } finally { submit.disabled = false; }
+    });
+  });
+  $('screening-form').addEventListener('submit', (event) => {
+    event.preventDefault(); run(async () => {
+      const form = $('screening-form');
+      if (!form.reportValidity()) return;
+      const answers = {};
+      for (const field of $('screening-questions').querySelectorAll('[data-answer-id]'))
+        answers[field.dataset.answerId] = field.value;
+      const submit = $('screening-submit'); submit.disabled = true;
+      try {
+        const result = await client.request('/api/v1/screening/answers', { method: 'POST', body: {
+          form_version_id: $('screening-version').value, visit_id: $('screening-visit').value, answers,
+        } });
+        $('screening-review-note').textContent = `Submitted (revision ${result.revision}). Status: ${result.review.decision}. Vet review is pending; no clinical clearance was granted.`;
+        $('screening-status').textContent = 'Answers submitted and audit recorded.';
+        form.reset(); $('screening-questions').replaceChildren();
+      } finally { submit.disabled = false; }
+    });
+  });
   $('api-refresh-visits').addEventListener('click', () => run(loadVisits));
   const localValue = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);

@@ -14,7 +14,7 @@
 <!-- ============================================================
      PWA — суулгаж болох програм болгох (manifest + icon)
      ============================================================ -->
-<link rel="manifest" href="manifest.json?v=20261123-r5-draft-notes">
+<link rel="manifest" href="manifest.json?v=20261127-r8-p1-pharmacy">
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -29,10 +29,10 @@
      ⚠️ Доорх firebaseConfig-ийг ӨӨРИЙН project-ийн утгаар СОЛИНО.
         Firebase Console → Project settings → Your apps → Web app
      ============================================================ -->
-<script type="module" src="firebase.js?v=20261123-r5-draft-notes"></script>
+<script type="module" src="firebase.js?v=20261127-r8-p1-pharmacy"></script>
 
-<link rel="stylesheet" href="style.css?v=20261123-r5-draft-notes">
-<link rel="stylesheet" href="backend-workbench.css?v=20261123-r5-draft-notes">
+<link rel="stylesheet" href="style.css?v=20261127-r8-p1-pharmacy">
+<link rel="stylesheet" href="backend-workbench.css?v=20261127-r8-p1-pharmacy">
 </head>
 <body>
 
@@ -780,6 +780,22 @@
 
       <!-- ====== 💊 ЭМИЙН САН ====== -->
       <section class="page" id="page-pharmacy">
+        <div class="card p1-screening-card" id="p1-pharmacy-area" hidden>
+          <div class="ch">R8 · Clinical API pharmacy <span class="ch-r">Branch scoped</span></div>
+          <p class="p1-api-note">This P1 view shows prescriptions authorized for the current branch. A new record is saved as a draft only; it does not reserve stock, dispense medicine, or post a movement to Odoo. Server permissions control each request.</p>
+          <div id="p1-pharmacy-status" class="p1-api-status" role="status" aria-live="polite"></div>
+          <form id="p1-prescription-form" class="fg r2 wb-form" hidden>
+            <div class="fld"><label for="p1-prescription-visit">Clinical visit</label><select class="inp" name="visit_id" id="p1-prescription-visit" required></select></div>
+            <div class="fld"><label for="p1-prescription-medication">Medication name</label><input class="inp" name="medication_name" id="p1-prescription-medication" required maxlength="200"></div>
+            <div class="fld"><label for="p1-prescription-quantity">Prescribed quantity</label><input class="inp" name="quantity" id="p1-prescription-quantity" type="number" min="0.0001" step="0.0001" required></div>
+            <div class="fld"><label for="p1-prescription-unit">Unit</label><input class="inp" name="unit" id="p1-prescription-unit" required maxlength="32" placeholder="As prescribed"></div>
+            <div class="fld" style="grid-column:1/-1"><label for="p1-prescription-instructions">Instructions</label><textarea class="inp" name="instructions" id="p1-prescription-instructions" rows="2" maxlength="4000"></textarea></div>
+            <div class="wb-form-actions"><button class="btn btn-p" type="submit">Save prescription draft</button></div>
+          </form>
+          <div class="ch" style="margin-top:12px">Clinical API prescriptions</div>
+          <div id="p1-prescription-records" class="wb-table-wrap"></div>
+        </div>
+        <div id="legacy-pharmacy-view">
         <div class="ph">
           <div class="ph-l">
             <div class="ph-title">💊 Pharmacy</div>
@@ -798,6 +814,7 @@
         <div class="phtab" data-phtab="today" id="ph-today"></div>
         <div class="phtab hidden" data-phtab="catalog" id="ph-catalog"></div>
         <div class="phtab hidden" data-phtab="usage" id="ph-usage"></div>
+        </div>
       </section>
 
       <!-- ====== LAB (ШИНЖИЛГЭЭ) ====== -->
@@ -1987,15 +2004,15 @@
 
 <div id="print-area"></div>
 
-<script src="app.js?v=20261123-r5-draft-notes"></script>
-<script src="lab.js?v=20261123-r5-draft-notes"></script>
-<script src="pharmacy.js?v=20261123-r5-draft-notes"></script>
-<script src="timesheet.js?v=20261123-r5-draft-notes"></script>
-<script src="dailyreport.js?v=20261123-r5-draft-notes"></script>
-<script src="dashboard-backend-demo.js?v=20261123-r5-draft-notes"></script>
-<script type="module" src="p1-ui.mjs?v=20261123-r5-draft-notes"></script>
+<script src="app.js?v=20261127-r8-p1-pharmacy"></script>
+<script src="lab.js?v=20261127-r8-p1-pharmacy"></script>
+<script src="pharmacy.js?v=20261127-r8-p1-pharmacy"></script>
+<script src="timesheet.js?v=20261127-r8-p1-pharmacy"></script>
+<script src="dailyreport.js?v=20261127-r8-p1-pharmacy"></script>
+<script src="dashboard-backend-demo.js?v=20261127-r8-p1-pharmacy"></script>
+<script type="module" src="p1-ui.mjs?v=20261127-r8-p1-pharmacy"></script>
 
 <!-- PWA: service worker бүртгэх, автомат шинэчлэлт, суулгах товч -->
-<script src="pwa.js?v=20261123-r5-draft-notes"></script>
+<script src="pwa.js?v=20261127-r8-p1-pharmacy"></script>
 </body>
 </html>

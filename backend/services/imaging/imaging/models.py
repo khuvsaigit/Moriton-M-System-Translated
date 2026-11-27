@@ -1,6 +1,6 @@
 import uuid
-from django.core.validators import RegexValidator
 from django.db import models
+from .validators import validate_dicom_uid, validate_sha256
 
 class ImagingStudy(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -8,7 +8,7 @@ class ImagingStudy(models.Model):
     branch_id = models.UUIDField(db_index=True)
     horse_id = models.UUIDField()
     visit_id = models.UUIDField(null=True, blank=True)
-    study_instance_uid = models.CharField(max_length=128)
+    study_instance_uid = models.CharField(max_length=64, validators=[validate_dicom_uid])
     modality = models.CharField(max_length=16, blank=True)
     study_date = models.DateField(null=True, blank=True)
     study_time = models.DateTimeField(null=True, blank=True)
@@ -23,7 +23,7 @@ class ImagingSeries(models.Model):
     organization_id = models.UUIDField(db_index=True)
     branch_id = models.UUIDField(db_index=True)
     study = models.ForeignKey(ImagingStudy, on_delete=models.PROTECT, related_name="series")
-    series_instance_uid = models.CharField(max_length=128)
+    series_instance_uid = models.CharField(max_length=64, validators=[validate_dicom_uid])
     series_number = models.PositiveIntegerField(null=True, blank=True)
     description = models.CharField(max_length=255, blank=True)
     class Meta:
@@ -34,14 +34,14 @@ class ImagingInstance(models.Model):
     organization_id = models.UUIDField(db_index=True)
     branch_id = models.UUIDField(db_index=True)
     series = models.ForeignKey(ImagingSeries, on_delete=models.PROTECT, related_name="instances")
-    sop_instance_uid = models.CharField(max_length=128)
-    sop_class_uid = models.CharField(max_length=128, blank=True)
-    transfer_syntax_uid = models.CharField(max_length=128, blank=True)
+    sop_instance_uid = models.CharField(max_length=64, validators=[validate_dicom_uid])
+    sop_class_uid = models.CharField(max_length=64, blank=True, validators=[validate_dicom_uid])
+    transfer_syntax_uid = models.CharField(max_length=64, blank=True, validators=[validate_dicom_uid])
     quarantine_key = models.TextField()
     source_object_version = models.CharField(max_length=255, blank=True)
     archive_key = models.TextField(blank=True)
     archive_object_version = models.CharField(max_length=255, blank=True)
-    sha256 = models.CharField(max_length=64, validators=[RegexValidator(r"^[0-9a-fA-F]{64}$", "Expected a 64-character SHA-256 digest.")])
+    sha256 = models.CharField(max_length=64, validators=[validate_sha256])
     byte_length = models.PositiveBigIntegerField()
     scan_status = models.CharField(max_length=32, default="PENDING")
     parsed_metadata = models.JSONField(default=dict, blank=True)
@@ -50,6 +50,7 @@ class ImagingInstance(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["series", "sop_instance_uid"], name="imaging_sop_uid_unique"),
             models.CheckConstraint(condition=models.Q(byte_length__gt=0), name="imaging_inst_bytes_positive"),
+            models.CheckConstraint(condition=models.Q(sha256__regex=r"^[0-9a-fA-F]{64}$"), name="imaging_sha256_format_ck"),
         ]
 
 

@@ -92,6 +92,9 @@ function initialize() {
     $('api-visit-records').replaceChildren(); $('api-reception-records').replaceChildren(); $('api-waiting-area').hidden = true;
     $('screening-area').hidden = true; $('screening-questions').replaceChildren(); $('screening-review-note').textContent = '';
     $('screening-review-records').replaceChildren();
+    $('p1-pharmacy-area').hidden = true; $('legacy-pharmacy-view').hidden = false;
+    $('p1-pharmacy-status').textContent = ''; $('p1-prescription-records').replaceChildren();
+    $('p1-prescription-form').reset(); $('p1-prescription-form').hidden = true;
     $('clinical-draft-area').hidden = true; $('clinical-draft-form').reset(); $('clinical-draft-status').textContent = '';
     $('clinical-draft-version').value = 'No draft note'; clinicalVisits = []; currentClinicalNote = null;
     screeningForms = []; screeningVisits = [];
@@ -115,7 +118,8 @@ function initialize() {
       const target = active === 'page-waiting' ? $('api-waiting-status')
         : active === 'page-planned' ? $('schedule-status')
         : active === 'page-history' ? $('audit-status')
-          : active === 'page-exam' && !$('screening-area').hidden ? $('screening-status') : $('p1-status');
+          : active === 'page-exam' && !$('screening-area').hidden ? $('screening-status')
+            : active === 'page-pharmacy' && !$('p1-pharmacy-area').hidden ? $('p1-pharmacy-status') : $('p1-status');
       target.textContent = error.message; target.className = 'p1-api-status error';
     }
   }
@@ -144,6 +148,10 @@ function initialize() {
     $('branch').hidden = !can('branch.read') && !can('branch.manage');
     $('appointments').hidden = !can('appointment.read') && !can('appointment.request') && !can('roster.read');
     $('audit').hidden = !can('audit.read');
+    const pharmacyAllowed = can('pharmacy.read') || can('pharmacy.prescribe');
+    $('p1-pharmacy-area').hidden = !pharmacyAllowed;
+    $('legacy-pharmacy-view').hidden = true;
+    $('p1-prescription-form').hidden = !can('pharmacy.prescribe') || !can('visit.read');
     $('screening-area').hidden = !can('screening.read') && !can('screening.review.read');
     $('screening-form').hidden = !can('screening.read');
     $('screening-review-area').hidden = !can('screening.review.read');
@@ -155,6 +163,7 @@ function initialize() {
       waiting: ['visit.read'],
       planned: ['appointment.read', 'appointment.request', 'roster.read'],
       history: ['audit.read'],
+      pharmacy: ['pharmacy.read', 'pharmacy.prescribe'],
     };
     for (const [page, permissions] of Object.entries(pageRules)) {
       for (const item of document.querySelectorAll(`[data-page="${page}"]`)) {
@@ -224,6 +233,38 @@ function initialize() {
     const result = await client.request('/api/v1/audit-events?' + query);
     table('audit-records', ['Time', 'Action', 'Record', 'Actor', 'Details'], result.items.map((row) => [row.occurred_at, row.action, `${row.aggregate_type}: ${row.aggregate_id}`, row.actor_id, element('pre', JSON.stringify(row.details, null, 2))]));
     cursor = result.next_cursor; $('audit-next').hidden = !cursor;
+  }
+  async function loadP1Pharmacy() {
+    if (!window.p1ClinicalApi?.connected || $('p1-pharmacy-area').hidden) return;
+    const canRead = can('pharmacy.read');
+    const canDraft = can('pharmacy.prescribe') && can('visit.read');
+    $('p1-prescription-form').hidden = !canDraft;
+    let visits = [];
+    if (can('visit.read') && (canRead || canDraft)) {
+      const visitResult = await client.request('/api/v1/visits');
+      visits = visitResult.items || [];
+    }
+    if (canDraft) {
+      const openVisits = visits.filter((row) => ['REGISTERED', 'ARRIVED', 'IN_PROGRESS'].includes(row.status));
+      options($('p1-prescription-visit'), openVisits,
+        (row) => `${row.slip_number} · ${row.horse?.name || row.horse_id} · ${row.status}`);
+      $('p1-prescription-form').querySelector('button[type="submit"]').disabled = !openVisits.length;
+    }
+    if (!canRead) {
+      $('p1-prescription-records').replaceChildren(element('p', 'This session needs pharmacy.read to view branch prescriptions. Draft creation, if enabled above, is checked separately by the server.'));
+      $('p1-pharmacy-status').textContent = canDraft ? 'Draft capture is available. It does not reserve stock, dispense medicine, or write to Odoo.' : 'This session has no pharmacy read or draft permission.';
+      return;
+    }
+    const result = await client.request('/api/v1/pharmacy/prescriptions');
+    const visitById = new Map(visits.map((visit) => [visit.id, visit]));
+    table('p1-prescription-records', ['Visit / horse', 'Prescription', 'Status / version', 'Verification', 'Medication details'],
+      (result.items || []).map((row) => {
+        const visit = visitById.get(row.visit_id);
+        const detail = (row.lines || []).map((line) => `${line.medication_name} · ${line.prescribed_quantity} ${line.unit}${line.instructions ? ` · ${line.instructions}` : ''}`).join('; ');
+        return [visit ? `${visit.slip_number} · ${visit.horse?.name || visit.horse_id}` : row.visit_id,
+          row.id, `${row.status} · v${row.version}`, row.verified_at || 'Not verified', detail || '—'];
+      }));
+    $('p1-pharmacy-status').textContent = 'Showing Clinical API prescriptions for the server-authorized branch. Draft capture creates no stock reservation or Odoo transaction.';
   }
   async function loadVisits() {
     $('api-waiting-area').hidden = false;
@@ -373,6 +414,7 @@ function initialize() {
     if (page === 'dashboard' && can('branch.read')) run(loadBranch);
     if (page === 'planned' && (can('appointment.read') || can('roster.read'))) run(loadSchedule);
     if (page === 'history' && can('audit.read')) run(() => loadAudit());
+    if (page === 'pharmacy') run(loadP1Pharmacy);
     if (page === 'waiting') run(loadVisits);
     if (page === 'exam' && (can('screening.read') || can('screening.review.read'))) run(loadScreening);
     if (page === 'exam' && can('clinical_note.draft.write') && can('visit.read')) run(loadClinicalDrafts);
@@ -399,6 +441,7 @@ function initialize() {
     if (can('appointment.read') || can('roster.read')) await loadSchedule();
     if (can('visit.read')) await loadVisits();
     if (can('clinical_note.draft.write') && can('visit.read')) await loadClinicalDrafts();
+    if (document.querySelector('.page.active')?.id === 'page-pharmacy') await loadP1Pharmacy();
     message('P1 API session connected. API access is controlled by server permissions.');
   }));
   $('p1-logout').addEventListener('click', () => run(async () => { await window.p1Disconnect(); message('Signed out.'); }));
@@ -421,6 +464,18 @@ function initialize() {
     await loadSchedule(); message('Duty shift recorded.');
   });
   form('audit-form', () => loadAudit()); $('audit-next').addEventListener('click', () => run(() => loadAudit(true)));
+  $('p1-prescription-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    run(async () => {
+      if (!can('pharmacy.prescribe') || !can('visit.read')) throw new Error('The server session needs pharmacy.prescribe and visit.read.');
+      const body = values($('p1-prescription-form'));
+      const visitId = body.visit_id; delete body.visit_id;
+      await client.request(`/api/v1/visits/${visitId}/prescriptions`, { method: 'POST', body });
+      $('p1-prescription-form').reset();
+      await loadP1Pharmacy();
+      $('p1-pharmacy-status').textContent = 'Prescription draft saved. No stock was reserved or posted to Odoo.';
+    });
+  });
   $('screening-version').addEventListener('change', renderScreeningQuestions);
   $('clinical-draft-visit').addEventListener('change', selectClinicalDraftVisit);
   $('clinical-draft-form').addEventListener('submit', (event) => {

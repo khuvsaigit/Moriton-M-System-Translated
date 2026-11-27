@@ -1,11 +1,14 @@
 openapi: 3.1.0
-info: {title: Moriton External Integrations API, version: 1.0.0}
+info:
+  title: Moriton External Integrations API
+  version: 1.0.0
+  description: >-
+    Approved browser-facing integration operations only. Health checks, internal service
+    commands and worker operations are private and excluded from this UI contract and
+    browser API estimates. Call24 file validation and deduplication belong to this service;
+    Clinical receives only a validated reception task through an approved contract.
 servers: [{url: /api/v1}]
 paths:
-  /health/live:
-    get:
-      operationId: integrationsLiveness
-      responses: {'200': {description: Process is alive}}
   /call24/preview:
     post:
       operationId: previewCall24Csv

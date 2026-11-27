@@ -1,5 +1,11 @@
 openapi: 3.1.0
-info: {title: Moriton Clinical Operations API, version: 1.0.0}
+info:
+  title: Moriton Clinical Operations API
+  version: 1.0.0
+  description: >-
+    Browser-facing business operations exposed through the secured application entry point.
+    Private health checks, development routes, internal service commands and worker operations
+    are intentionally excluded from this UI contract and from browser API estimates.
 servers: [{url: /api/v1}]
 paths:
   /session:
@@ -173,14 +179,6 @@ paths:
       operationId: listPendingScreeningReviews
       security: [{sessionAuth: []}]
       responses: {'200': {description: 'Up to 100 pending answer submissions for the authorized branch; read-only; screening.review.read required'}}
-  /health/live:
-    get:
-      operationId: clinicalLiveness
-      responses: {'200': {description: Process is alive}}
-  /health/ready:
-    get:
-      operationId: clinicalReadiness
-      responses: {'200': {description: Service readiness}}
   /appointments/{appointment_id}/actions:
     post:
       operationId: transitionAppointment

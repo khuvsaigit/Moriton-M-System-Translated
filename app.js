@@ -1530,7 +1530,7 @@ function nav(p, opts) {
   if (p === 'history') renderHistory();
   if (p === 'lab' && typeof renderLab === 'function') renderLab();
   if (p === 'review') renderReview();
-  if (p === 'pharmacy' && typeof renderPharmacy === 'function') renderPharmacy();
+  if (p === 'pharmacy' && typeof renderPharmacy === 'function' && !window.p1ClinicalApi?.connected) renderPharmacy();
   if (p === 'timesheet' && typeof renderTimesheet === 'function') renderTimesheet();
   if (p === 'admin') renderAdmin();
   if (window.p1PageChanged) window.p1PageChanged(p);

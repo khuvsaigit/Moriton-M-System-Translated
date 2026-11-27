@@ -326,6 +326,9 @@ function updatePharmBadge() {
   ['bdg-ph', 'bdg-ph2'].forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = n; el.style.display = n ? '' : 'none'; } });
 }
 function renderPharmacy() {
+  // The P1 shell owns this page while a server-authorized Clinical API session is active.
+  // Do not repaint it from the legacy Firebase-backed state during that session.
+  if (window.p1ClinicalApi?.connected) return;
   const page = document.getElementById('page-pharmacy'); if (!page) return;
   try { if (typeof ensureInpCardStyles === 'function') ensureInpCardStyles(); } catch (e) {}
   const dEl = document.getElementById('ph-date'); if (dEl && !dEl.value) dEl.value = todayStr();
